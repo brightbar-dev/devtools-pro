@@ -2,6 +2,7 @@ import '@/assets/inspector.css';
 import { parseColor, toHex, toRgb, toHsl, contrastRatio, wcagRating } from '@/utils/colors';
 import { PROPERTY_CATEGORIES, isDefaultValue, isCategoryRelevant, formatCssRule } from '@/utils/css';
 import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont } from '@/utils/fonts';
+import type { CssVariable } from '@/utils/css-vars';
 import { parsePx, formatPx, formatSides } from '@/utils/spacing';
 import { elementSelector, formatDimensions, textPreview, escapeHtml } from '@/utils/dom';
 import type { BoxModel, BoxSides } from '@/utils/spacing';
@@ -246,6 +247,114 @@ export default defineContentScript({
       return html;
     }
 
+    function buildRulersPanel(el: Element): string {
+      const rect = el.getBoundingClientRect();
+      let html = '<div class="dtp-section-header">Measurements</div>';
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Width</span><span class="dtp-prop-val">${Math.round(rect.width)}px</span></div>`;
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Height</span><span class="dtp-prop-val">${Math.round(rect.height)}px</span></div>`;
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Top</span><span class="dtp-prop-val">${Math.round(rect.top)}px from viewport</span></div>`;
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Left</span><span class="dtp-prop-val">${Math.round(rect.left)}px from viewport</span></div>`;
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Bottom</span><span class="dtp-prop-val">${Math.round(window.innerHeight - rect.bottom)}px to bottom</span></div>`;
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Right</span><span class="dtp-prop-val">${Math.round(window.innerWidth - rect.right)}px to right</span></div>`;
+
+      // Distance to parent
+      const parent = el.parentElement;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        html += '<div class="dtp-section-header" style="margin-top:8px">Distance to Parent</div>';
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Top</span><span class="dtp-prop-val">${Math.round(rect.top - parentRect.top)}px</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Left</span><span class="dtp-prop-val">${Math.round(rect.left - parentRect.left)}px</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Bottom</span><span class="dtp-prop-val">${Math.round(parentRect.bottom - rect.bottom)}px</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Right</span><span class="dtp-prop-val">${Math.round(parentRect.right - rect.right)}px</span></div>`;
+      }
+
+      // Adjacent siblings
+      const prev = el.previousElementSibling;
+      const next = el.nextElementSibling;
+      if (prev || next) {
+        html += '<div class="dtp-section-header" style="margin-top:8px">Sibling Gaps</div>';
+        if (prev) {
+          const prevRect = prev.getBoundingClientRect();
+          const gap = Math.round(rect.top - prevRect.bottom);
+          html += `<div class="dtp-prop"><span class="dtp-prop-name">Above</span><span class="dtp-prop-val">${gap}px gap</span></div>`;
+        }
+        if (next) {
+          const nextRect = next.getBoundingClientRect();
+          const gap = Math.round(nextRect.top - rect.bottom);
+          html += `<div class="dtp-prop"><span class="dtp-prop-name">Below</span><span class="dtp-prop-val">${gap}px gap</span></div>`;
+        }
+      }
+
+      return html;
+    }
+
+    function buildGridPanel(el: Element): string {
+      const cs = window.getComputedStyle(el);
+      const display = cs.display;
+      let html = '<div class="dtp-section-header">Layout</div>';
+      html += `<div class="dtp-prop"><span class="dtp-prop-name">Display</span><span class="dtp-prop-val">${display}</span></div>`;
+
+      if (display.includes('grid')) {
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Columns</span><span class="dtp-prop-val">${cs.gridTemplateColumns}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Rows</span><span class="dtp-prop-val">${cs.gridTemplateRows}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Gap</span><span class="dtp-prop-val">${cs.gap || cs.gridGap || 'none'}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Areas</span><span class="dtp-prop-val">${cs.gridTemplateAreas || 'none'}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Auto Flow</span><span class="dtp-prop-val">${cs.gridAutoFlow}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Align Items</span><span class="dtp-prop-val">${cs.alignItems}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Justify Items</span><span class="dtp-prop-val">${cs.justifyItems}</span></div>`;
+
+        // Count children
+        const children = el.children.length;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Children</span><span class="dtp-prop-val">${children}</span></div>`;
+      } else if (display.includes('flex')) {
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Direction</span><span class="dtp-prop-val">${cs.flexDirection}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Wrap</span><span class="dtp-prop-val">${cs.flexWrap}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Gap</span><span class="dtp-prop-val">${cs.gap || 'none'}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Justify Content</span><span class="dtp-prop-val">${cs.justifyContent}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Align Items</span><span class="dtp-prop-val">${cs.alignItems}</span></div>`;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Align Content</span><span class="dtp-prop-val">${cs.alignContent}</span></div>`;
+
+        const children = el.children.length;
+        html += `<div class="dtp-prop"><span class="dtp-prop-name">Children</span><span class="dtp-prop-val">${children}</span></div>`;
+
+        // Show child flex properties
+        if (children > 0 && children <= 12) {
+          html += '<div class="dtp-section-header" style="margin-top:8px">Child Items</div>';
+          for (let i = 0; i < children; i++) {
+            const child = el.children[i] as HTMLElement;
+            const childCs = window.getComputedStyle(child);
+            const grow = childCs.flexGrow;
+            const shrink = childCs.flexShrink;
+            const basis = childCs.flexBasis;
+            const tag = child.tagName.toLowerCase();
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">${tag}[${i}]</span><span class="dtp-prop-val">${grow} ${shrink} ${basis}</span></div>`;
+          }
+        }
+      } else {
+        html += '<div class="dtp-prop"><span class="dtp-prop-name">Note</span><span class="dtp-prop-val">Not a grid or flex container</span></div>';
+
+        // Check if element is a flex/grid child
+        const parentCs = el.parentElement ? window.getComputedStyle(el.parentElement) : null;
+        if (parentCs) {
+          const parentDisplay = parentCs.display;
+          if (parentDisplay.includes('flex')) {
+            html += '<div class="dtp-section-header" style="margin-top:8px">Flex Item Properties</div>';
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Flex</span><span class="dtp-prop-val">${cs.flexGrow} ${cs.flexShrink} ${cs.flexBasis}</span></div>`;
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Align Self</span><span class="dtp-prop-val">${cs.alignSelf}</span></div>`;
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Order</span><span class="dtp-prop-val">${cs.order}</span></div>`;
+          } else if (parentDisplay.includes('grid')) {
+            html += '<div class="dtp-section-header" style="margin-top:8px">Grid Item Properties</div>';
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Column</span><span class="dtp-prop-val">${cs.gridColumn}</span></div>`;
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Row</span><span class="dtp-prop-val">${cs.gridRow}</span></div>`;
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Align Self</span><span class="dtp-prop-val">${cs.alignSelf}</span></div>`;
+            html += `<div class="dtp-prop"><span class="dtp-prop-name">Justify Self</span><span class="dtp-prop-val">${cs.justifySelf}</span></div>`;
+          }
+        }
+      }
+
+      return html;
+    }
+
     function buildPanelContent(el: Element): string {
       switch (activeTool) {
         case 'css-inspect': return buildCssPanel(el);
@@ -253,6 +362,8 @@ export default defineContentScript({
         case 'font-detect': return buildFontPanel(el);
         case 'spacing': return buildSpacingPanel(el);
         case 'element-info': return buildElementPanel(el);
+        case 'rulers': return buildRulersPanel(el);
+        case 'grid-overlay': return buildGridPanel(el);
         default: return buildCssPanel(el);
       }
     }
@@ -348,6 +459,12 @@ export default defineContentScript({
       if (msg.action === 'getPageAssets') {
         return Promise.resolve(collectPageAssets());
       }
+      if (msg.action === 'getCssVariables') {
+        return Promise.resolve(collectCssVariables());
+      }
+      if (msg.action === 'getAccessibilityData') {
+        return Promise.resolve(collectAccessibilityData());
+      }
     });
 
     function collectMetaTags(): Array<{ name: string; content: string; type: string }> {
@@ -382,6 +499,157 @@ export default defineContentScript({
       }
 
       return tags;
+    }
+
+    function collectCssVariables(): CssVariable[] {
+      const vars: CssVariable[] = [];
+      const seen = new Set<string>();
+
+      // Collect from stylesheets
+      try {
+        for (const sheet of document.styleSheets) {
+          try {
+            for (const rule of sheet.cssRules) {
+              if (rule instanceof CSSStyleRule) {
+                const style = rule.style;
+                for (let i = 0; i < style.length; i++) {
+                  const prop = style[i];
+                  if (prop.startsWith('--')) {
+                    const key = `${rule.selectorText}::${prop}`;
+                    if (!seen.has(key)) {
+                      seen.add(key);
+                      vars.push({
+                        name: prop,
+                        value: style.getPropertyValue(prop).trim(),
+                        scope: rule.selectorText,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          } catch {
+            // CORS — can't read cross-origin stylesheets
+          }
+        }
+      } catch {
+        // No stylesheets accessible
+      }
+
+      // Collect from inline styles on root/body
+      const rootStyle = document.documentElement.style;
+      for (let i = 0; i < rootStyle.length; i++) {
+        const prop = rootStyle[i];
+        if (prop.startsWith('--')) {
+          const key = `:root::${prop}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            vars.push({
+              name: prop,
+              value: rootStyle.getPropertyValue(prop).trim(),
+              scope: ':root (inline)',
+            });
+          }
+        }
+      }
+
+      return vars;
+    }
+
+    function collectAccessibilityData() {
+      // Images
+      const images = document.querySelectorAll('img');
+      const imagesTotal = images.length;
+      let imagesWithoutAlt = 0;
+      images.forEach(img => {
+        if (!img.hasAttribute('alt')) imagesWithoutAlt++;
+      });
+
+      // Headings
+      const headingEls = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const headings: Array<{ level: number; text: string }> = [];
+      headingEls.forEach(h => {
+        const level = parseInt(h.tagName[1], 10);
+        headings.push({ level, text: (h.textContent || '').trim().slice(0, 80) });
+      });
+
+      // Landmarks
+      const hasMainLandmark = document.querySelector('main, [role="main"]') !== null;
+      const hasNavLandmark = document.querySelector('nav, [role="navigation"]') !== null;
+      const hasSkipLink = (() => {
+        const firstLink = document.querySelector('a');
+        if (!firstLink) return false;
+        const href = firstLink.getAttribute('href') || '';
+        return href.startsWith('#') && (firstLink.textContent || '').toLowerCase().includes('skip');
+      })();
+
+      // Links without text
+      let linksWithoutText = 0;
+      document.querySelectorAll('a').forEach(a => {
+        const text = (a.textContent || '').trim();
+        const ariaLabel = a.getAttribute('aria-label') || '';
+        const title = a.getAttribute('title') || '';
+        const img = a.querySelector('img[alt]');
+        if (!text && !ariaLabel && !title && !img) linksWithoutText++;
+      });
+
+      // Buttons without text
+      let buttonsWithoutText = 0;
+      document.querySelectorAll('button, [role="button"]').forEach(btn => {
+        const text = (btn.textContent || '').trim();
+        const ariaLabel = btn.getAttribute('aria-label') || '';
+        const title = btn.getAttribute('title') || '';
+        if (!text && !ariaLabel && !title) buttonsWithoutText++;
+      });
+
+      // Form inputs without labels
+      let formInputsWithoutLabel = 0;
+      document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea').forEach(input => {
+        const id = input.getAttribute('id');
+        const hasLabel = id ? document.querySelector(`label[for="${id}"]`) !== null : false;
+        const hasAriaLabel = !!input.getAttribute('aria-label');
+        const hasAriaLabelledby = !!input.getAttribute('aria-labelledby');
+        const parentLabel = input.closest('label') !== null;
+        if (!hasLabel && !hasAriaLabel && !hasAriaLabelledby && !parentLabel) formInputsWithoutLabel++;
+      });
+
+      // Positive tabindex
+      let tabindexPositive = 0;
+      document.querySelectorAll('[tabindex]').forEach(el => {
+        const val = parseInt(el.getAttribute('tabindex') || '0', 10);
+        if (val > 0) tabindexPositive++;
+      });
+
+      // ARIA roles used
+      const ariaRoles = new Set<string>();
+      document.querySelectorAll('[role]').forEach(el => {
+        const role = el.getAttribute('role');
+        if (role) ariaRoles.add(role);
+      });
+
+      // Document
+      const htmlLang = document.documentElement.getAttribute('lang') || '';
+      const titleText = document.title || '';
+
+      // Landmark count
+      const landmarkCount = document.querySelectorAll('main, nav, aside, header, footer, [role="main"], [role="navigation"], [role="complementary"], [role="banner"], [role="contentinfo"]').length;
+
+      return {
+        imagesTotal,
+        imagesWithoutAlt,
+        headings,
+        hasMainLandmark,
+        hasNavLandmark,
+        hasSkipLink,
+        linksWithoutText,
+        buttonsWithoutText,
+        formInputsWithoutLabel,
+        tabindexPositive,
+        ariaRolesUsed: [...ariaRoles].sort(),
+        htmlLang,
+        titleText,
+        landmarkCount,
+      };
     }
 
     function collectPageAssets(): { images: number; scripts: number; stylesheets: number; fonts: string[] } {

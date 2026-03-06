@@ -1,4 +1,6 @@
 import { TOOLS, isProTool } from '@/utils/tools';
+import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
+import { isColorValue } from '@/utils/css-vars';
 
 const toolsGrid = document.getElementById('tools-grid')!;
 const metaPanel = document.getElementById('meta-panel')!;
@@ -53,13 +55,14 @@ function setupListeners() {
       }
     }
 
-    // Meta tags and page assets show in popup, not content script
-    if (toolId === 'meta-tags') {
-      showMetaPanel();
-      return;
-    }
+    // Popup-based tools (show data in popup panel, not content overlay)
+    if (toolId === 'meta-tags') { showMetaPanel(); return; }
+    if (toolId === 'css-vars') { showCssVarsPanel(); return; }
+    if (toolId === 'accessibility') { showAccessibilityPanel(); return; }
+    if (toolId === 'assets') { showAssetsPanel(); return; }
+    if (toolId === 'screenshot') { captureScreenshot(); return; }
 
-    // Toggle active state
+    // Toggle active state for overlay-based tools
     if (activeTool === toolId) {
       deactivateTool();
     } else {
@@ -140,6 +143,227 @@ async function showMetaPanel() {
     metaContent.innerHTML = html;
   } catch {
     metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+  }
+}
+
+async function showCssVarsPanel() {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = 'CSS Variables';
+  metaContent.innerHTML = '<div class="dtp-loading">Scanning...</div>';
+
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    const vars = await browser.tabs.sendMessage(tab.id, { action: 'getCssVariables' });
+    if (!vars || !Array.isArray(vars) || vars.length === 0) {
+      metaContent.innerHTML = '<div class="dtp-empty">No CSS variables found on this page</div>';
+      return;
+    }
+
+    let html = `<div class="dtp-stats-bar">${vars.length} variable${vars.length !== 1 ? 's' : ''} found</div>`;
+
+    // Group by scope
+    const scopeMap = new Map<string, typeof vars>();
+    for (const v of vars) {
+      const existing = scopeMap.get(v.scope) || [];
+      existing.push(v);
+      scopeMap.set(v.scope, existing);
+    }
+
+    // Sort: :root first
+    const sortedScopes = [...scopeMap.entries()].sort(([a], [b]) => {
+      if (a.startsWith(':root')) return -1;
+      if (b.startsWith(':root')) return 1;
+      return a.localeCompare(b);
+    });
+
+    for (const [scope, scopeVars] of sortedScopes) {
+      html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">${escapeHtml(scope)} (${scopeVars.length})</div>`;
+      for (const v of scopeVars) {
+        const swatch = isColorValue(v.value) ? `<span class="dtp-swatch" style="background:${v.value}"></span>` : '';
+        html += `<div class="dtp-meta-row dtp-copyable" data-copy="${escapeHtml(v.name)}: ${escapeHtml(v.value)}">
+          <span class="dtp-meta-key">${escapeHtml(v.name)}</span>
+          <span class="dtp-meta-val">${swatch}${escapeHtml(v.value)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    metaContent.innerHTML = html;
+
+    // Copy on click
+    metaContent.addEventListener('click', (e) => {
+      const row = (e.target as HTMLElement).closest('[data-copy]');
+      if (row) {
+        navigator.clipboard.writeText(row.getAttribute('data-copy') || '').catch(() => {});
+        row.classList.add('dtp-copied');
+        setTimeout(() => row.classList.remove('dtp-copied'), 800);
+      }
+    });
+  } catch {
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+  }
+}
+
+async function showAccessibilityPanel() {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = 'Accessibility';
+  metaContent.innerHTML = '<div class="dtp-loading">Analyzing...</div>';
+
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    const data = await browser.tabs.sendMessage(tab.id, { action: 'getAccessibilityData' });
+    if (!data) {
+      metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
+      return;
+    }
+
+    // Process headings
+    const headings = analyzeHeadings(data.headings || []);
+
+    // Build issues
+    const issues = analyzeIssues({
+      imagesWithoutAlt: data.imagesWithoutAlt,
+      imagesTotal: data.imagesTotal,
+      headings,
+      hasMainLandmark: data.hasMainLandmark,
+      hasNavLandmark: data.hasNavLandmark,
+      hasSkipLink: data.hasSkipLink,
+      linksWithoutText: data.linksWithoutText,
+      buttonsWithoutText: data.buttonsWithoutText,
+      formInputsWithoutLabel: data.formInputsWithoutLabel,
+      tabindexPositive: data.tabindexPositive,
+      contrastIssues: 0,
+      htmlLang: data.htmlLang,
+      titleText: data.titleText,
+    });
+
+    const stats = computeStats(issues);
+    const sorted = sortIssues(issues);
+
+    // Stats bar
+    let html = `<div class="dtp-a11y-stats">
+      <span class="dtp-a11y-stat dtp-a11y-error">${stats.errors} error${stats.errors !== 1 ? 's' : ''}</span>
+      <span class="dtp-a11y-stat dtp-a11y-warning">${stats.warnings} warning${stats.warnings !== 1 ? 's' : ''}</span>
+      <span class="dtp-a11y-stat dtp-a11y-info">${stats.info} info</span>
+    </div>`;
+
+    // Issues list
+    html += '<div class="dtp-a11y-issues">';
+    for (const issue of sorted) {
+      const iconText = issueIcon(issue.type);
+      html += `<div class="dtp-a11y-issue dtp-a11y-${issue.type}">
+        <span class="dtp-a11y-icon">${iconText}</span>
+        <div class="dtp-a11y-body">
+          <span class="dtp-a11y-cat">${escapeHtml(issue.category)}</span>
+          <span class="dtp-a11y-msg">${escapeHtml(issue.message)}</span>
+          ${issue.details ? `<span class="dtp-a11y-details">${escapeHtml(issue.details)}</span>` : ''}
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+
+    // Heading structure
+    if (headings.length > 0) {
+      html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Heading Structure</div>';
+      for (const h of headings) {
+        const indent = (h.level - 1) * 12;
+        const cls = h.outOfOrder ? ' dtp-a11y-warn-text' : '';
+        html += `<div class="dtp-meta-row${cls}" style="padding-left:${indent}px">
+          <span class="dtp-meta-key">h${h.level}</span>
+          <span class="dtp-meta-val">${escapeHtml(h.text)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // ARIA roles
+    if (data.ariaRolesUsed && data.ariaRolesUsed.length > 0) {
+      html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">ARIA Roles (${data.ariaRolesUsed.length})</div>`;
+      html += `<div class="dtp-a11y-tags">${data.ariaRolesUsed.map((r: string) => `<span class="dtp-a11y-tag">${escapeHtml(r)}</span>`).join('')}</div>`;
+      html += '</div>';
+    }
+
+    metaContent.innerHTML = html;
+  } catch {
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+  }
+}
+
+async function showAssetsPanel() {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = 'Page Assets';
+  metaContent.innerHTML = '<div class="dtp-loading">Scanning...</div>';
+
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    const data = await browser.tabs.sendMessage(tab.id, { action: 'getPageAssets' });
+    if (!data) {
+      metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
+      return;
+    }
+
+    let html = '<div class="dtp-stats-bar">';
+    html += `<span>${data.images} images</span>`;
+    html += `<span>${data.scripts} scripts</span>`;
+    html += `<span>${data.stylesheets} stylesheets</span>`;
+    html += `<span>${data.fonts.length} fonts</span>`;
+    html += '</div>';
+
+    // Fonts
+    if (data.fonts.length > 0) {
+      html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Fonts Used</div>';
+      for (const font of data.fonts) {
+        html += `<div class="dtp-meta-row">
+          <span class="dtp-meta-val" style="font-family:'${escapeHtml(font)}',sans-serif">${escapeHtml(font)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">Summary</div>
+      <div class="dtp-meta-row"><span class="dtp-meta-key">Images</span><span class="dtp-meta-val">${data.images} (img, picture, svg)</span></div>
+      <div class="dtp-meta-row"><span class="dtp-meta-key">Scripts</span><span class="dtp-meta-val">${data.scripts} external</span></div>
+      <div class="dtp-meta-row"><span class="dtp-meta-key">Stylesheets</span><span class="dtp-meta-val">${data.stylesheets} linked</span></div>
+    </div>`;
+
+    metaContent.innerHTML = html;
+  } catch {
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+  }
+}
+
+async function captureScreenshot() {
+  try {
+    const dataUrl = await browser.runtime.sendMessage({ action: 'captureTab' });
+    if (!dataUrl) return;
+
+    // Create download link
+    const a = document.createElement('a');
+    a.href = dataUrl as string;
+    a.download = `screenshot-${Date.now()}.png`;
+    a.click();
+
+    // Show brief feedback
+    toolsGrid.style.display = 'none';
+    metaPanel.style.display = 'block';
+    metaTitle.textContent = 'Screenshot';
+    metaContent.innerHTML = `<div class="dtp-screenshot-preview">
+      <img src="${dataUrl}" alt="Screenshot" style="width:100%;border-radius:4px;margin:8px 0;">
+      <div class="dtp-empty">Screenshot saved to downloads</div>
+    </div>`;
+  } catch {
+    toolsGrid.style.display = 'none';
+    metaPanel.style.display = 'block';
+    metaTitle.textContent = 'Screenshot';
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot capture this page (restricted page or permission denied)</div>';
   }
 }
 
