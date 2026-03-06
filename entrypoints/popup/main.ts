@@ -1,6 +1,7 @@
 import { TOOLS, isProTool } from '@/utils/tools';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
 import { isColorValue } from '@/utils/css-vars';
+import { resolveProStatus, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
 
 const toolsGrid = document.getElementById('tools-grid')!;
 const metaPanel = document.getElementById('meta-panel')!;
@@ -46,11 +47,12 @@ function setupListeners() {
 
     const toolId = btn.dataset.tool!;
 
-    // Check pro status
+    // Check pro status via ExtensionPay
     if (isProTool(toolId)) {
-      const settings = await browser.runtime.sendMessage({ action: 'getSettings' });
-      if (!settings.proUnlocked) {
-        showProUpsell();
+      const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
+      const status = resolveProStatus(user);
+      if (!status.unlocked) {
+        showProUpsell(!!user.trialStartedAt);
         return;
       }
     }
@@ -367,15 +369,32 @@ async function captureScreenshot() {
   }
 }
 
-function showProUpsell() {
+function showProUpsell(trialUsed: boolean) {
+  let trialHtml = '';
+  if (!trialUsed) {
+    trialHtml = `<button class="dtp-trial-btn" id="start-trial">Start ${TRIAL_DAYS}-day free trial</button>`;
+  }
+
   metaContent.innerHTML = `<div class="dtp-upsell">
     <h3>Unlock Pro Tools</h3>
     <p>Get access to screenshots, accessibility checker, CSS variables, rulers, grid overlay, and page assets.</p>
-    <button class="dtp-buy-btn" id="buy-pro">Unlock Pro — $59</button>
+    ${trialHtml}
+    <button class="dtp-buy-btn" id="buy-pro">Unlock Pro — ${PRICE_DISPLAY}</button>
+    <button class="dtp-login-btn" id="login-link">Already purchased? Log in</button>
   </div>`;
   toolsGrid.style.display = 'none';
   metaPanel.style.display = 'block';
   metaTitle.textContent = 'DevTools Pro';
+
+  document.getElementById('buy-pro')?.addEventListener('click', () => {
+    browser.runtime.sendMessage({ action: 'openPayment' });
+  });
+  document.getElementById('start-trial')?.addEventListener('click', () => {
+    browser.runtime.sendMessage({ action: 'openTrial' });
+  });
+  document.getElementById('login-link')?.addEventListener('click', () => {
+    browser.runtime.sendMessage({ action: 'openLogin' });
+  });
 }
 
 function escapeHtml(str: string): string {

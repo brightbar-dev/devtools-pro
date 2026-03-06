@@ -1,14 +1,47 @@
+import { resolveProStatus, statusLabel, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+
 const themeSelect = document.getElementById('theme') as HTMLSelectElement;
 const compactCheckbox = document.getElementById('compact-mode') as HTMLInputElement;
 
 async function init() {
-  const settings = await browser.storage.local.get(['theme', 'compactMode', 'proUnlocked']);
+  const settings = await browser.storage.local.get(['theme', 'compactMode']);
   themeSelect.value = settings.theme || 'auto';
   compactCheckbox.checked = settings.compactMode || false;
 
-  if (settings.proUnlocked) {
-    const status = document.getElementById('license-status')!;
-    status.innerHTML = '<span class="dtp-badge-pro">Pro</span><p>All 12 tools unlocked.</p>';
+  // Load license status from ExtensionPay
+  const statusEl = document.getElementById('license-status')!;
+  try {
+    const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
+    const proStatus = resolveProStatus(user);
+    const label = statusLabel(proStatus);
+
+    if (proStatus.paid) {
+      statusEl.innerHTML = `<span class="dtp-badge-pro">${label}</span><p>All 12 tools unlocked.</p>`;
+    } else if (proStatus.trialActive) {
+      statusEl.innerHTML = `<span class="dtp-badge-trial">${label}</span><p>All 12 tools unlocked during trial.</p>
+        <button class="dtp-buy-btn" id="buy-pro">Buy Pro — ${PRICE_DISPLAY}</button>`;
+    } else {
+      let trialBtn = '';
+      if (!user.trialStartedAt) {
+        trialBtn = `<button class="dtp-trial-btn" id="start-trial">Start ${TRIAL_DAYS}-day free trial</button>`;
+      }
+      statusEl.innerHTML = `<span class="dtp-badge-free">Free</span><p>6 tools available. Unlock Pro for all 12 tools.</p>
+        ${trialBtn}
+        <button class="dtp-buy-btn" id="buy-pro">Buy Pro — ${PRICE_DISPLAY}</button>
+        <button class="dtp-login-btn" id="login-link">Already purchased? Log in</button>`;
+    }
+
+    document.getElementById('buy-pro')?.addEventListener('click', () => {
+      browser.runtime.sendMessage({ action: 'openPayment' });
+    });
+    document.getElementById('start-trial')?.addEventListener('click', () => {
+      browser.runtime.sendMessage({ action: 'openTrial' });
+    });
+    document.getElementById('login-link')?.addEventListener('click', () => {
+      browser.runtime.sendMessage({ action: 'openLogin' });
+    });
+  } catch {
+    // ExtPay unavailable — show default free status
   }
 }
 

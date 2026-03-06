@@ -203,6 +203,43 @@ body {
 
 .dtp-buy-btn:hover { background: var(--dtp-primary-hover); }
 
+.dtp-trial-btn {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: var(--dtp-primary);
+  border: 1px solid var(--dtp-primary);
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 8px;
+}
+
+.dtp-trial-btn:hover { background: var(--dtp-surface); }
+
+.dtp-upsell .dtp-buy-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.dtp-login-btn {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--dtp-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px;
+}
+
+.dtp-login-btn:hover { color: var(--dtp-primary); text-decoration: underline; }
+
 /* Footer */
 .dtp-footer {
   display: flex;
