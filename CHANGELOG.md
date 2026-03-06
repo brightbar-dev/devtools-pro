@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.2.0...devtools-pro-v0.3.0) (2026-03-06)
+
+
+### Features
+
+* implement all 6 pro tools ([4a4c87e](https://github.com/brightbar-dev/devtools-pro/commit/4a4c87e0986f97e8fac4036a4bfb13ef13ba3ec5))
+* integrate ExtensionPay for Pro licensing ([e33c3e6](https://github.com/brightbar-dev/devtools-pro/commit/e33c3e660fab0de3e594376968b256f96870e19b))
+
 ## [0.2.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.1.0...devtools-pro-v0.2.0) (2026-03-06)
 
 
