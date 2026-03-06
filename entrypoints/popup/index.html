@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevTools Pro</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="dtp-popup">
+    <header class="dtp-header">
+      <h1>DevTools Pro</h1>
+    </header>
+
+    <section class="dtp-tools" id="tools-grid">
+      <!-- Tool buttons rendered by main.ts -->
+    </section>
+
+    <section class="dtp-meta-panel" id="meta-panel" style="display:none">
+      <div class="dtp-meta-header">
+        <button id="meta-back" class="dtp-back-btn" title="Back">&larr;</button>
+        <span id="meta-title">Page Meta</span>
+      </div>
+      <div id="meta-content" class="dtp-meta-content"></div>
+    </section>
+
+    <footer class="dtp-footer">
+      <span class="dtp-version">v0.1.0</span>
+      <a href="#" id="options-link" class="dtp-options-link">Settings</a>
+    </footer>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

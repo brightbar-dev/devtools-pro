@@ -1,0 +1,22 @@
+{
+  "name": "devtools-pro",
+  "description": "All-in-one developer browser toolkit — CSS inspection, element debugging, font/color detection, screenshot capture, and more.",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt --browser firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build --browser firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip --browser firefox",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9",
+    "wxt": "^0.20.5"
+  }
+}

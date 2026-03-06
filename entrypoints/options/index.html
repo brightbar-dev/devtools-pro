@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="manifest.open_in_tab" />
+  <title>DevTools Pro — Settings</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="dtp-options">
+    <h1>DevTools Pro Settings</h1>
+
+    <section class="dtp-section">
+      <h2>Appearance</h2>
+      <div class="dtp-field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="auto">Auto (system)</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+      <div class="dtp-field">
+        <label>
+          <input type="checkbox" id="compact-mode">
+          Compact mode — hide default CSS values
+        </label>
+      </div>
+    </section>
+
+    <section class="dtp-section">
+      <h2>License</h2>
+      <div id="license-status" class="dtp-license-status">
+        <span class="dtp-badge-free">Free</span>
+        <p>6 tools available. Unlock Pro for all 12 tools.</p>
+      </div>
+    </section>
+
+    <section class="dtp-section">
+      <h2>About</h2>
+      <p>DevTools Pro v0.1.0</p>
+      <p>Built by <a href="https://brightbar.dev" target="_blank">Brightbar</a></p>
+    </section>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
