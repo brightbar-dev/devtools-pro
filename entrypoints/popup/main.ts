@@ -45,6 +45,20 @@ function renderTools() {
   }).join('');
 }
 
+function showError(msg: string) {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = 'Error';
+  metaContent.innerHTML = `<div class="dtp-empty" style="color:var(--dtp-fail)">${escapeHtml(msg)}</div>`;
+}
+
+function showStatus(title: string, msg: string) {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = title;
+  metaContent.innerHTML = `<div class="dtp-empty">${escapeHtml(msg)}</div>`;
+}
+
 function setupListeners() {
   toolsGrid.addEventListener('click', async (e) => {
     const btn = (e.target as HTMLElement).closest('.dtp-tool-btn') as HTMLElement;
@@ -52,28 +66,39 @@ function setupListeners() {
 
     const toolId = btn.dataset.tool!;
 
-    // Check pro status via ExtensionPay
-    if (isProTool(toolId)) {
-      const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
-      const status = resolveProStatus(user);
-      if (!status.unlocked) {
-        showProUpsell(!!user.trialStartedAt);
-        return;
+    try {
+      // Check pro status for pro tools
+      if (isProTool(toolId)) {
+        try {
+          const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
+          const status = resolveProStatus(user);
+          if (!status.unlocked) {
+            showProUpsell(!!user.trialStartedAt);
+            return;
+          }
+        } catch {
+          // ExtPay unavailable — show upsell with trial option
+          showProUpsell(false);
+          return;
+        }
       }
-    }
 
-    // Popup-based tools (show data in popup panel, not content overlay)
-    if (toolId === 'meta-tags') { showMetaPanel(); return; }
-    if (toolId === 'css-vars') { showCssVarsPanel(); return; }
-    if (toolId === 'accessibility') { showAccessibilityPanel(); return; }
-    if (toolId === 'assets') { showAssetsPanel(); return; }
-    if (toolId === 'screenshot') { captureScreenshot(); return; }
+      // Popup-based tools (show data in popup panel, not content overlay)
+      if (toolId === 'meta-tags') { showMetaPanel(); return; }
+      if (toolId === 'css-vars') { showCssVarsPanel(); return; }
+      if (toolId === 'accessibility') { showAccessibilityPanel(); return; }
+      if (toolId === 'assets') { showAssetsPanel(); return; }
+      if (toolId === 'screenshot') { captureScreenshot(); return; }
 
-    // Toggle active state for overlay-based tools
-    if (activeTool === toolId) {
-      deactivateTool();
-    } else {
-      activateTool(toolId);
+      // Toggle active state for overlay-based tools
+      if (activeTool === toolId) {
+        deactivateTool();
+      } else {
+        activateTool(toolId);
+      }
+    } catch (err) {
+      console.error('Tool click failed:', err);
+      showError(`Tool "${toolId}" failed: ${(err as Error).message || 'Unknown error'}`);
     }
   });
 
@@ -92,9 +117,36 @@ async function activateTool(toolId: string) {
   activeTool = toolId;
   updateActiveState();
 
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      showStatus(toolId, 'No active tab found');
+      return;
+    }
     await browser.tabs.sendMessage(tab.id, { action: 'activateTool', toolId });
+    // Show feedback — tool is active on the page
+    showStatus('Active', 'Hover over elements on the page to inspect. Press Escape to deactivate.');
+  } catch {
+    // Content script not injected — try programmatic injection
+    try {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content-scripts/content.js'],
+        });
+        await browser.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ['content-scripts/content.css'],
+        });
+        // Retry the activation
+        await browser.tabs.sendMessage(tab.id, { action: 'activateTool', toolId });
+        showStatus('Active', 'Hover over elements on the page to inspect. Press Escape to deactivate.');
+      }
+    } catch (err) {
+      console.error('Failed to inject content script:', err);
+      showError('Cannot inspect this page. Try refreshing the page first.');
+    }
   }
 }
 
@@ -102,9 +154,13 @@ async function deactivateTool() {
   activeTool = null;
   updateActiveState();
 
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    await browser.tabs.sendMessage(tab.id, { action: 'deactivate' });
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      await browser.tabs.sendMessage(tab.id, { action: 'deactivate' });
+    }
+  } catch {
+    // Content script not available — that's OK, just reset local state
   }
 }
 
@@ -123,7 +179,10 @@ async function showMetaPanel() {
 
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
+    if (!tab?.id) {
+      metaContent.innerHTML = '<div class="dtp-empty">No active tab</div>';
+      return;
+    }
 
     const tags = await browser.tabs.sendMessage(tab.id, { action: 'getMetaTags' });
     if (!tags || !Array.isArray(tags)) {
@@ -149,7 +208,7 @@ async function showMetaPanel() {
     }
     metaContent.innerHTML = html;
   } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
 }
 
@@ -209,7 +268,7 @@ async function showCssVarsPanel() {
       }
     });
   } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
 }
 
@@ -297,7 +356,7 @@ async function showAccessibilityPanel() {
 
     metaContent.innerHTML = html;
   } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
 }
 
@@ -343,14 +402,22 @@ async function showAssetsPanel() {
 
     metaContent.innerHTML = html;
   } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page</div>';
+    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
 }
 
 async function captureScreenshot() {
+  toolsGrid.style.display = 'none';
+  metaPanel.style.display = 'block';
+  metaTitle.textContent = 'Screenshot';
+  metaContent.innerHTML = '<div class="dtp-loading">Capturing...</div>';
+
   try {
     const dataUrl = await browser.runtime.sendMessage({ action: 'captureTab' });
-    if (!dataUrl) return;
+    if (!dataUrl) {
+      metaContent.innerHTML = '<div class="dtp-empty">No screenshot captured</div>';
+      return;
+    }
 
     // Create download link
     const a = document.createElement('a');
@@ -358,18 +425,11 @@ async function captureScreenshot() {
     a.download = `screenshot-${Date.now()}.png`;
     a.click();
 
-    // Show brief feedback
-    toolsGrid.style.display = 'none';
-    metaPanel.style.display = 'block';
-    metaTitle.textContent = 'Screenshot';
     metaContent.innerHTML = `<div class="dtp-screenshot-preview">
       <img src="${dataUrl}" alt="Screenshot" style="width:100%;border-radius:4px;margin:8px 0;">
       <div class="dtp-empty">Screenshot saved to downloads</div>
     </div>`;
   } catch {
-    toolsGrid.style.display = 'none';
-    metaPanel.style.display = 'block';
-    metaTitle.textContent = 'Screenshot';
     metaContent.innerHTML = '<div class="dtp-empty">Cannot capture this page (restricted page or permission denied)</div>';
   }
 }
