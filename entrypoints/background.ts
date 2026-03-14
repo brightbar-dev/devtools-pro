@@ -6,14 +6,22 @@ export default defineBackground(() => {
   try {
     extpay = ExtPay(EXTPAY_ID);
     extpay.startBackground();
-
-    // Listen for payment events — update local storage for fast status checks
-    extpay.onPaid.addListener((user) => {
-      console.log('ExtPay: user paid!', user);
-      browser.storage.local.set({ proUnlocked: true, paidAt: user.paidAt?.toISOString() || null });
-    });
+    console.log('ExtPay initialized successfully, ID:', EXTPAY_ID);
   } catch (err) {
-    console.warn('ExtPay initialization failed (expected when running unpacked):', err);
+    console.warn('ExtPay initialization failed:', err);
+  }
+
+  // Register onPaid separately — it throws if the extensionpay.com content script
+  // isn't in the manifest (ExtPay does an exact match check)
+  if (extpay) {
+    try {
+      extpay.onPaid.addListener((user) => {
+        console.log('ExtPay onPaid fired:', user);
+      });
+    } catch (err) {
+      // Expected if content_scripts doesn't include extensionpay.com/* match
+      console.log('ExtPay onPaid listener not available (content script for extensionpay.com not registered):', (err as string).slice(0, 100));
+    }
   }
 
   // Set defaults on install
@@ -50,16 +58,30 @@ export default defineBackground(() => {
     }
 
     if (msg.action === 'getProStatus') {
-      if (!extpay) return Promise.resolve({ paid: false, paidAt: null, trialStartedAt: null });
-      return extpay.getUser().then(user => ({
-        paid: user.paid,
-        paidAt: user.paidAt,
-        trialStartedAt: user.trialStartedAt,
-      })).catch(() => ({
-        paid: false,
-        paidAt: null,
-        trialStartedAt: null,
-      }));
+      if (!extpay) {
+        console.warn('ExtPay is null — returning unpaid');
+        return Promise.resolve({ paid: false, paidAt: null, trialStartedAt: null });
+      }
+      return extpay.getUser().then(user => {
+        console.log('ExtPay getUser() result:', JSON.stringify({
+          paid: user.paid,
+          paidAt: user.paidAt,
+          trialStartedAt: user.trialStartedAt,
+        }));
+        return {
+          paid: user.paid,
+          paidAt: user.paidAt,
+          trialStartedAt: user.trialStartedAt,
+        };
+      }).catch(err => {
+        console.error('ExtPay getUser() FAILED:', err);
+        return {
+          paid: false,
+          paidAt: null,
+          trialStartedAt: null,
+          error: String(err),
+        };
+      });
     }
 
     if (msg.action === 'openPayment') {

@@ -70,15 +70,21 @@ function setupListeners() {
       // Check pro status for pro tools
       if (isProTool(toolId)) {
         try {
-          const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
-          const status = resolveProStatus(user);
+          const user = await browser.runtime.sendMessage({ action: 'getProStatus' });
+          console.log('Pro status response:', JSON.stringify(user));
+          // If there was an error fetching, show it
+          if (user.error) {
+            showError(`License check failed: ${user.error}`);
+            return;
+          }
+          const status = resolveProStatus(user as PaymentUser);
           if (!status.unlocked) {
             showProUpsell(!!user.trialStartedAt);
             return;
           }
-        } catch {
-          // ExtPay unavailable — show upsell with trial option
-          showProUpsell(false);
+        } catch (err) {
+          console.error('Pro status check failed:', err);
+          showError(`License check error: ${(err as Error).message || err}`);
           return;
         }
       }
