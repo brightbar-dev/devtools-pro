@@ -1,4 +1,7 @@
-import { resolveProStatus, statusLabel, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+import ExtPay from 'extpay';
+import { resolveProStatus, statusLabel, EXTPAY_ID, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+
+const extpay = ExtPay(EXTPAY_ID);
 
 const themeSelect = document.getElementById('theme') as HTMLSelectElement;
 const compactCheckbox = document.getElementById('compact-mode') as HTMLInputElement;
@@ -8,11 +11,11 @@ async function init() {
   themeSelect.value = settings.theme || 'auto';
   compactCheckbox.checked = settings.compactMode || false;
 
-  // Load license status from ExtensionPay
+  // Load license status from ExtensionPay directly (not via background messaging)
   const statusEl = document.getElementById('license-status')!;
   try {
-    const user: PaymentUser = await browser.runtime.sendMessage({ action: 'getProStatus' });
-    const proStatus = resolveProStatus(user);
+    const user = await extpay.getUser();
+    const proStatus = resolveProStatus(user as PaymentUser);
     const label = statusLabel(proStatus);
 
     if (proStatus.paid) {
@@ -32,13 +35,13 @@ async function init() {
     }
 
     document.getElementById('buy-pro')?.addEventListener('click', () => {
-      browser.runtime.sendMessage({ action: 'openPayment' });
+      extpay.openPaymentPage();
     });
     document.getElementById('start-trial')?.addEventListener('click', () => {
-      browser.runtime.sendMessage({ action: 'openTrial' });
+      extpay.openTrialPage('7-day free trial');
     });
     document.getElementById('login-link')?.addEventListener('click', () => {
-      browser.runtime.sendMessage({ action: 'openLogin' });
+      extpay.openLoginPage();
     });
   } catch {
     // ExtPay unavailable — show default free status

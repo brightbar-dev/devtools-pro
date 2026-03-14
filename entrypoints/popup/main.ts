@@ -1,7 +1,10 @@
+import ExtPay from 'extpay';
 import { TOOLS, isProTool } from '@/utils/tools';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
 import { isColorValue } from '@/utils/css-vars';
-import { resolveProStatus, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+import { resolveProStatus, EXTPAY_ID, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+
+const extpay = ExtPay(EXTPAY_ID);
 
 const toolsGrid = document.getElementById('tools-grid')!;
 const metaPanel = document.getElementById('meta-panel')!;
@@ -67,16 +70,11 @@ function setupListeners() {
     const toolId = btn.dataset.tool!;
 
     try {
-      // Check pro status for pro tools
+      // Check pro status for pro tools — call ExtPay directly (not via background
+      // messaging, which has listener conflicts with ExtPay's startBackground)
       if (isProTool(toolId)) {
         try {
-          const user = await browser.runtime.sendMessage({ action: 'getProStatus' });
-          console.log('Pro status response:', JSON.stringify(user));
-          // If there was an error fetching, show it
-          if (user.error) {
-            showError(`License check failed: ${user.error}`);
-            return;
-          }
+          const user = await extpay.getUser();
           const status = resolveProStatus(user as PaymentUser);
           if (!status.unlocked) {
             showProUpsell(!!user.trialStartedAt);
@@ -84,7 +82,7 @@ function setupListeners() {
           }
         } catch (err) {
           console.error('Pro status check failed:', err);
-          showError(`License check error: ${(err as Error).message || err}`);
+          showProUpsell(false);
           return;
         }
       }
@@ -462,15 +460,13 @@ function showProUpsell(trialUsed: boolean) {
   metaTitle.textContent = 'DevTools Pro';
 
   document.getElementById('buy-pro')?.addEventListener('click', () => {
-    browser.runtime.sendMessage({ action: 'openPayment' });
+    extpay.openPaymentPage();
   });
   document.getElementById('start-trial')?.addEventListener('click', () => {
-    browser.runtime.sendMessage({ action: 'openTrial' });
+    extpay.openTrialPage('7-day free trial');
   });
   document.getElementById('login-link')?.addEventListener('click', () => {
-    // Opens ExtPay login page in a new tab — user enters their email
-    // to link this browser to their purchase
-    browser.runtime.sendMessage({ action: 'openLogin' });
+    extpay.openLoginPage();
     metaContent.innerHTML = `<div class="dtp-upsell">
       <h3>Restore License</h3>
       <p>A new tab has opened. Enter the email you used to purchase, then come back here and reopen this popup.</p>
