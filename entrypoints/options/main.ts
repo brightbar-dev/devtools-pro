@@ -53,4 +53,4 @@ compactCheckbox.addEventListener('change', () => {
   browser.storage.local.set({ compactMode: compactCheckbox.checked });
 });
 
-init();
+init().catch(err => console.error('Options init failed:', err));
