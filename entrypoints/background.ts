@@ -2,8 +2,13 @@ import ExtPay from 'extpay';
 import { EXTPAY_ID } from '@/utils/payment';
 
 export default defineBackground(() => {
-  const extpay = ExtPay(EXTPAY_ID);
-  extpay.startBackground();
+  let extpay: ReturnType<typeof ExtPay> | null = null;
+  try {
+    extpay = ExtPay(EXTPAY_ID);
+    extpay.startBackground();
+  } catch (err) {
+    console.warn('ExtPay initialization failed (expected when running unpacked):', err);
+  }
 
   // Set defaults on install
   browser.runtime.onInstalled.addListener(async (details) => {
@@ -39,6 +44,7 @@ export default defineBackground(() => {
     }
 
     if (msg.action === 'getProStatus') {
+      if (!extpay) return Promise.resolve({ paid: false, paidAt: null, trialStartedAt: null });
       return extpay.getUser().then(user => ({
         paid: user.paid,
         paidAt: user.paidAt,
@@ -51,14 +57,17 @@ export default defineBackground(() => {
     }
 
     if (msg.action === 'openPayment') {
+      if (!extpay) return;
       return extpay.openPaymentPage();
     }
 
     if (msg.action === 'openTrial') {
+      if (!extpay) return;
       return extpay.openTrialPage('7-day free trial');
     }
 
     if (msg.action === 'openLogin') {
+      if (!extpay) return;
       return extpay.openLoginPage();
     }
   });

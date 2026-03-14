@@ -13,8 +13,13 @@ const optionsLink = document.getElementById('options-link')!;
 let activeTool: string | null = null;
 
 async function init() {
-  const settings = await browser.runtime.sendMessage({ action: 'getSettings' });
-  applyTheme(settings.theme || 'auto');
+  try {
+    const settings = await browser.runtime.sendMessage({ action: 'getSettings' });
+    applyTheme(settings?.theme || 'auto');
+  } catch (err) {
+    console.warn('Failed to load settings, using defaults:', err);
+    applyTheme('auto');
+  }
   renderTools();
   setupListeners();
 }
@@ -401,4 +406,4 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-init();
+init().catch(err => console.error('Popup init failed:', err));
