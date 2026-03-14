@@ -6,6 +6,12 @@ export default defineBackground(() => {
   try {
     extpay = ExtPay(EXTPAY_ID);
     extpay.startBackground();
+
+    // Listen for payment events — update local storage for fast status checks
+    extpay.onPaid.addListener((user) => {
+      console.log('ExtPay: user paid!', user);
+      browser.storage.local.set({ proUnlocked: true, paidAt: user.paidAt?.toISOString() || null });
+    });
   } catch (err) {
     console.warn('ExtPay initialization failed (expected when running unpacked):', err);
   }

@@ -109,7 +109,11 @@ function setupListeners() {
 
   optionsLink.addEventListener('click', (e) => {
     e.preventDefault();
-    browser.runtime.openOptionsPage();
+    browser.runtime.openOptionsPage().catch((err) => {
+      console.error('Failed to open options page:', err);
+      // Fallback: open options.html directly
+      browser.tabs.create({ url: browser.runtime.getURL('options.html') });
+    });
   });
 }
 
@@ -445,7 +449,7 @@ function showProUpsell(trialUsed: boolean) {
     <p>Get access to screenshots, accessibility checker, CSS variables, rulers, grid overlay, and page assets.</p>
     ${trialHtml}
     <button class="dtp-buy-btn" id="buy-pro">Unlock Pro — ${PRICE_DISPLAY}</button>
-    <button class="dtp-login-btn" id="login-link">Already purchased? Log in</button>
+    <button class="dtp-login-btn" id="login-link">Already purchased? Restore license</button>
   </div>`;
   toolsGrid.style.display = 'none';
   metaPanel.style.display = 'block';
@@ -458,7 +462,13 @@ function showProUpsell(trialUsed: boolean) {
     browser.runtime.sendMessage({ action: 'openTrial' });
   });
   document.getElementById('login-link')?.addEventListener('click', () => {
+    // Opens ExtPay login page in a new tab — user enters their email
+    // to link this browser to their purchase
     browser.runtime.sendMessage({ action: 'openLogin' });
+    metaContent.innerHTML = `<div class="dtp-upsell">
+      <h3>Restore License</h3>
+      <p>A new tab has opened. Enter the email you used to purchase, then come back here and reopen this popup.</p>
+    </div>`;
   });
 }
 

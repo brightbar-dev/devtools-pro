@@ -42,7 +42,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 ## Monetization
 - Free tier: 6 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta)
 - Pro tier: 6 tools (Screenshot, Accessibility, CSS Variables, Rulers, Grid Overlay, Page Assets)
-- Pricing: $59 one-time or $5/mo (via ExtensionPay, not yet integrated)
+- Pricing: $60 one-time (via ExtensionPay — integrated, registered as `devtools-pro`)
 - Pro gating via `proUnlocked` flag in `browser.storage.local`
 
 ## Commands

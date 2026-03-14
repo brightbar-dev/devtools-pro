@@ -7,8 +7,8 @@
 /** ExtensionPay extension ID. Replace after registering at extensionpay.com */
 export const EXTPAY_ID = 'devtools-pro';
 
-/** Pricing: one-time $59 purchase */
-export const PRICE_DISPLAY = '$59';
+/** Pricing: one-time $60 purchase */
+export const PRICE_DISPLAY = '$60';
 export const PRICE_LABEL = 'one-time';
 
 /** Trial duration in days */
