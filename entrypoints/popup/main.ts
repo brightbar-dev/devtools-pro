@@ -234,15 +234,26 @@ async function showCssVarsPanel() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    const vars = await sendWithFallback(tab.id, { action: 'getCssVariables' });
-    if (!vars || !Array.isArray(vars) || vars.length === 0) {
-      metaContent.innerHTML = `<div class="dtp-empty">No CSS variables found on this page.
-        <p style="font-size:11px;color:#94a3b8;margin-top:8px">Note: CSS variables in cross-origin stylesheets (e.g. CDN-hosted CSS) cannot be read due to browser security restrictions. Only same-origin and inline styles are accessible.</p>
-      </div>`;
+    const result = await sendWithFallback(tab.id, { action: 'getCssVariables' });
+    // Handle both old format (plain array) and new format (object with metadata)
+    const vars = Array.isArray(result) ? result : (result?.vars || []);
+    const sheetsSkipped = Array.isArray(result) ? 0 : (result?.sheetsSkipped || 0);
+    const sheetsTotal = Array.isArray(result) ? 0 : (result?.sheetsTotal || 0);
+
+    if (vars.length === 0) {
+      let msg = 'No CSS variables found on this page.';
+      if (sheetsSkipped > 0) {
+        msg += `<p style="font-size:11px;color:#94a3b8;margin-top:8px">${sheetsSkipped} of ${sheetsTotal} stylesheet${sheetsTotal !== 1 ? 's' : ''} could not be read (cross-origin). Variables in CDN-hosted CSS are blocked by browser security restrictions.</p>`;
+      }
+      metaContent.innerHTML = `<div class="dtp-empty">${msg}</div>`;
       return;
     }
 
-    let html = `<div class="dtp-stats-bar">${vars.length} variable${vars.length !== 1 ? 's' : ''} found</div>`;
+    let corsNote = '';
+    if (sheetsSkipped > 0) {
+      corsNote = `<div style="font-size:11px;color:#94a3b8;padding:4px 0">${sheetsSkipped} of ${sheetsTotal} stylesheet${sheetsTotal !== 1 ? 's' : ''} skipped (cross-origin)</div>`;
+    }
+    let html = `<div class="dtp-stats-bar">${vars.length} variable${vars.length !== 1 ? 's' : ''} found${corsNote}</div>`;
 
     // Group by scope
     const scopeMap = new Map<string, typeof vars>();

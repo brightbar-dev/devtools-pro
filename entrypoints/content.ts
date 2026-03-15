@@ -560,13 +560,16 @@ export default defineContentScript({
       return tags;
     }
 
-    function collectCssVariables(): CssVariable[] {
+    function collectCssVariables(): { vars: CssVariable[]; sheetsTotal: number; sheetsSkipped: number } {
       const vars: CssVariable[] = [];
       const seen = new Set<string>();
+      let sheetsTotal = 0;
+      let sheetsSkipped = 0;
 
       // Collect from stylesheets
       try {
         for (const sheet of document.styleSheets) {
+          sheetsTotal++;
           try {
             for (const rule of sheet.cssRules) {
               if (rule instanceof CSSStyleRule) {
@@ -589,6 +592,7 @@ export default defineContentScript({
             }
           } catch {
             // CORS — can't read cross-origin stylesheets
+            sheetsSkipped++;
           }
         }
       } catch {
@@ -612,7 +616,7 @@ export default defineContentScript({
         }
       }
 
-      return vars;
+      return { vars, sheetsTotal, sheetsSkipped };
     }
 
     function collectAccessibilityData() {
