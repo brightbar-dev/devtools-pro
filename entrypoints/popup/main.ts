@@ -196,7 +196,7 @@ async function showMetaPanel() {
       return;
     }
 
-    const tags = await browser.tabs.sendMessage(tab.id, { action: 'getMetaTags' });
+    const tags = await sendWithFallback(tab.id, { action: 'getMetaTags' });
     if (!tags || !Array.isArray(tags)) {
       metaContent.innerHTML = '<div class="dtp-empty">No meta tags found</div>';
       return;
@@ -234,9 +234,11 @@ async function showCssVarsPanel() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    const vars = await browser.tabs.sendMessage(tab.id, { action: 'getCssVariables' });
+    const vars = await sendWithFallback(tab.id, { action: 'getCssVariables' });
     if (!vars || !Array.isArray(vars) || vars.length === 0) {
-      metaContent.innerHTML = '<div class="dtp-empty">No CSS variables found on this page</div>';
+      metaContent.innerHTML = `<div class="dtp-empty">No CSS variables found on this page.
+        <p style="font-size:11px;color:#94a3b8;margin-top:8px">Note: CSS variables in cross-origin stylesheets (e.g. CDN-hosted CSS) cannot be read due to browser security restrictions. Only same-origin and inline styles are accessible.</p>
+      </div>`;
       return;
     }
 
@@ -284,6 +286,23 @@ async function showCssVarsPanel() {
   }
 }
 
+async function sendWithFallback(tabId: number, message: any): Promise<any> {
+  try {
+    return await browser.tabs.sendMessage(tabId, message);
+  } catch {
+    // Content script not injected — try programmatic injection
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ['content-scripts/content.js'],
+    });
+    await browser.scripting.insertCSS({
+      target: { tabId },
+      files: ['content-scripts/content.css'],
+    });
+    return await browser.tabs.sendMessage(tabId, message);
+  }
+}
+
 async function showAccessibilityPanel() {
   toolsGrid.style.display = 'none';
   metaPanel.style.display = 'block';
@@ -294,7 +313,7 @@ async function showAccessibilityPanel() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    const data = await browser.tabs.sendMessage(tab.id, { action: 'getAccessibilityData' });
+    const data = await sendWithFallback(tab.id, { action: 'getAccessibilityData' });
     if (!data) {
       metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
       return;
@@ -382,7 +401,7 @@ async function showAssetsPanel() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
 
-    const data = await browser.tabs.sendMessage(tab.id, { action: 'getPageAssets' });
+    const data = await sendWithFallback(tab.id, { action: 'getPageAssets' });
     if (!data) {
       metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
       return;

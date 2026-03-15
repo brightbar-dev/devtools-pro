@@ -195,3 +195,61 @@
 #dtp-panel::-webkit-scrollbar { width: 4px; }
 #dtp-panel::-webkit-scrollbar-track { background: transparent; }
 #dtp-panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+
+/* Overlay toolbar for tool switching */
+#dtp-toolbar {
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #1e1e2e;
+  border: 1px solid #3b3b5c;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dtp-tb-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  padding: 0;
+  line-height: 1;
+}
+
+.dtp-tb-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.dtp-tb-active {
+  background: #4f46e5 !important;
+  color: #fff !important;
+}
+
+.dtp-tb-close {
+  margin-top: 4px;
+  border-top: 1px solid #3b3b5c;
+  padding-top: 4px;
+  color: #f87171;
+  font-size: 11px;
+}
+
+.dtp-tb-close:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}

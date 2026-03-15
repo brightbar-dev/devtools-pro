@@ -371,6 +371,7 @@ export default defineContentScript({
     function onMouseMove(e: MouseEvent) {
       const target = document.elementFromPoint(e.clientX, e.clientY);
       if (!target || target === overlay || target === panel || panel?.contains(target)) return;
+      if (target === toolbar || toolbar?.contains(target)) return;
       if (target.id?.startsWith('dtp-')) return;
 
       hoveredEl = target;
@@ -406,10 +407,64 @@ export default defineContentScript({
       }
     }
 
+    // Overlay tool definitions for the floating toolbar
+    const OVERLAY_TOOLS = [
+      { id: 'css-inspect', icon: '{}', name: 'CSS' },
+      { id: 'color-picker', icon: '🎨', name: 'Color' },
+      { id: 'font-detect', icon: 'Aa', name: 'Font' },
+      { id: 'spacing', icon: '⬜', name: 'Spacing' },
+      { id: 'element-info', icon: '<>', name: 'Element' },
+      { id: 'rulers', icon: '📏', name: 'Rulers' },
+      { id: 'grid-overlay', icon: '▦', name: 'Grid' },
+    ];
+
+    let toolbar: HTMLDivElement | null = null;
+
+    function createToolbar(): HTMLDivElement {
+      const el = document.createElement('div');
+      el.id = 'dtp-toolbar';
+      el.innerHTML = OVERLAY_TOOLS.map(t =>
+        `<button class="dtp-tb-btn" data-tool="${t.id}" title="${t.name}"><span>${t.icon}</span></button>`
+      ).join('') + '<button class="dtp-tb-btn dtp-tb-close" title="Close">✕</button>';
+
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const btn = (e.target as HTMLElement).closest('.dtp-tb-btn') as HTMLElement;
+        if (!btn) return;
+        if (btn.classList.contains('dtp-tb-close')) {
+          deactivate();
+          return;
+        }
+        const toolId = btn.dataset.tool;
+        if (toolId && toolId !== activeTool) {
+          activate(toolId);
+        }
+      }, true);
+
+      document.documentElement.appendChild(el);
+      return el;
+    }
+
+    function updateToolbarActive() {
+      if (!toolbar) return;
+      toolbar.querySelectorAll('.dtp-tb-btn[data-tool]').forEach(btn => {
+        const el = btn as HTMLElement;
+        el.classList.toggle('dtp-tb-active', el.dataset.tool === activeTool);
+      });
+    }
+
     function activate(toolId: string) {
       if (isActive && activeTool === toolId) {
         deactivate();
         return;
+      }
+
+      // Clean up existing listeners before adding new ones (fixes listener accumulation)
+      if (isActive) {
+        document.removeEventListener('mousemove', onMouseMove, true);
+        document.removeEventListener('click', onClick, true);
+        document.removeEventListener('keydown', onKeyDown, true);
       }
 
       activeTool = toolId;
@@ -417,9 +472,12 @@ export default defineContentScript({
 
       if (!overlay) overlay = createOverlay();
       if (!panel) panel = createPanel();
+      if (!toolbar) toolbar = createToolbar();
 
       overlay.style.display = 'none';
       panel.style.display = 'none';
+      toolbar.style.display = '';
+      updateToolbarActive();
 
       document.addEventListener('mousemove', onMouseMove, true);
       document.addEventListener('click', onClick, true);
@@ -439,6 +497,7 @@ export default defineContentScript({
 
       if (overlay) overlay.style.display = 'none';
       if (panel) panel.style.display = 'none';
+      if (toolbar) toolbar.style.display = 'none';
 
       browser.runtime.sendMessage({ action: 'setActiveTool', toolId: null }).catch(() => {});
     }
