@@ -1,10 +1,14 @@
-import ExtPay from 'extpay';
+import { createExtPay, resolveProStatus, type PaymentUser } from '@brightbar-dev/wxt-extpay/helpers';
 import { TOOLS, isProTool } from '@/utils/tools';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
 import { isColorValue } from '@/utils/css-vars';
-import { resolveProStatus, EXTPAY_ID, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
 
-const extpay = ExtPay(EXTPAY_ID);
+// These come from wxt.config.ts extpay config, but we read them here for UI display.
+// TODO: once the module generates the config file, import from there instead.
+const PRICE_DISPLAY = '$60';
+const TRIAL_DAYS = 7;
+
+const extpay = createExtPay('devtools-pro');
 
 const toolsGrid = document.getElementById('tools-grid')!;
 const metaPanel = document.getElementById('meta-panel')!;

@@ -1,15 +1,8 @@
-import ExtPay from 'extpay';
-import { EXTPAY_ID } from '@/utils/payment';
+import { initBackground } from '@brightbar-dev/wxt-extpay/helpers';
 
 export default defineBackground(() => {
-  // ExtPay background setup — registers message listener for payment notifications
-  // and handles the content script relay from extensionpay.com
-  try {
-    const extpay = ExtPay(EXTPAY_ID);
-    extpay.startBackground();
-  } catch (err) {
-    console.warn('ExtPay initialization failed:', err);
-  }
+  // ExtPay background setup — the module's content script handles payment relay
+  initBackground('devtools-pro');
 
   // Set defaults on install
   browser.runtime.onInstalled.addListener(async (details) => {
@@ -23,8 +16,8 @@ export default defineBackground(() => {
   });
 
   // Handle messages from popup and content scripts
-  // Note: ExtPay-related actions (getProStatus, openPayment, etc.) are handled
-  // directly by popup/options via their own ExtPay instance to avoid listener conflicts
+  // Note: ExtPay operations are handled directly by popup/options via their own
+  // ExtPay instance (from createExtPay) to avoid listener conflicts
   browser.runtime.onMessage.addListener((msg, sender) => {
     if (msg.action === 'captureTab') {
       return browser.tabs.captureVisibleTab(undefined, { format: 'png' });

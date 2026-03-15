@@ -1,7 +1,9 @@
-import ExtPay from 'extpay';
-import { resolveProStatus, statusLabel, EXTPAY_ID, PRICE_DISPLAY, TRIAL_DAYS, type PaymentUser } from '@/utils/payment';
+import { createExtPay, resolveProStatus, statusLabel, type PaymentUser } from '@brightbar-dev/wxt-extpay/helpers';
 
-const extpay = ExtPay(EXTPAY_ID);
+const PRICE_DISPLAY = '$60';
+const TRIAL_DAYS = 7;
+
+const extpay = createExtPay('devtools-pro');
 
 const themeSelect = document.getElementById('theme') as HTMLSelectElement;
 const compactCheckbox = document.getElementById('compact-mode') as HTMLInputElement;
