@@ -60,12 +60,12 @@ npm run test:watch   # Watch mode
 ```bash
 npm test
 ```
-- 177 unit tests via Vitest + WXT testing plugin
+- 197 unit tests via Vitest + WXT testing plugin
 - 9 test files covering: colors (32), css (21), fonts (17), spacing (16), dom (19), tools (13), css-vars (22), assets (16), accessibility (21)
 - All pure utility logic, no browser API mocking needed
 
 ## Conventions
 - WXT framework with vanilla TypeScript (no UI framework)
-- Version: semver, 0.1.x (MVP), 1.x = production-ready
+- Version: semver, 0.2.x (CWS-submitted), 1.x = production-ready
 - Conventional commits: feat:, fix:, chore:
 - Do NOT add Claude/AI as co-author or contributor
