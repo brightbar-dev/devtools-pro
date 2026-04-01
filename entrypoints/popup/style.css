@@ -380,3 +380,42 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--dtp-border); border-radius: 3px; }
+
+/* Cross-promotion */
+.dtp-cross-promo {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--dtp-border);
+}
+
+.dtp-cross-promo-heading {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dtp-text-secondary);
+  margin-bottom: 4px;
+}
+
+.dtp-cross-promo-list {
+  list-style: none;
+}
+
+.dtp-cross-promo-list li {
+  padding: 3px 0;
+}
+
+.dtp-cross-promo-list a {
+  font-size: 11px;
+  color: var(--dtp-primary);
+  text-decoration: none;
+}
+
+.dtp-cross-promo-list a:hover {
+  text-decoration: underline;
+}
+
+.dtp-cross-promo-desc {
+  color: var(--dtp-text-secondary);
+  font-size: 10px;
+}
