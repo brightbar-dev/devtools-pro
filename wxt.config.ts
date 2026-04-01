@@ -9,8 +9,9 @@ export default defineConfig({
     trialDays: 7,
   },
   manifest: {
-    name: 'DevTools Pro',
-    description: 'All-in-one developer toolkit: inspect CSS, detect fonts & colors, measure spacing, take screenshots, and more.',
+    name: '__MSG_appName__',
+    description: '__MSG_appDescription__',
+    default_locale: 'en',
     permissions: ['activeTab', 'storage', 'scripting'],
     host_permissions: ['<all_urls>'],
   },
