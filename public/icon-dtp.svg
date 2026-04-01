@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Indigo rounded square background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="#6366F1"/>
+
+  <!-- Simple gear/cog shape (hexagon with notches) -->
+  <!-- Outer gear body -->
+  <polygon points="64,18 78,24 88,36 90,52 88,68 78,80 64,86 50,80 40,68 38,52 40,36 50,24" fill="#FFFFFF"/>
+  <!-- Inner cutout (makes it look like a gear ring) -->
+  <circle cx="64" cy="52" r="18" fill="#6366F1"/>
+
+  <!-- Gear teeth (small rectangles around the gear) -->
+  <rect x="59" y="14" width="10" height="10" rx="2" fill="#FFFFFF"/>
+  <rect x="83" y="26" width="10" height="10" rx="2" fill="#FFFFFF"/>
+  <rect x="87" y="56" width="10" height="10" rx="2" fill="#FFFFFF"/>
+  <rect x="31" y="26" width="10" height="10" rx="2" fill="#FFFFFF"/>
+  <rect x="27" y="56" width="10" height="10" rx="2" fill="#FFFFFF"/>
+
+  <!-- Code </> inside the gear -->
+  <!-- < as filled polygon -->
+  <polygon points="58,42 48,52 58,62 54,62 44,52 54,42" fill="#FFFFFF"/>
+  <!-- > as filled polygon -->
+  <polygon points="70,42 80,52 70,62 74,62 84,52 74,42" fill="#FFFFFF"/>
+  <!-- / as filled rect rotated -->
+  <rect x="62" y="40" width="4" height="24" rx="2" fill="#FFFFFF" transform="rotate(15 64 52)"/>
+
+  <!-- PRO star badge (bottom right) -->
+  <circle cx="98" cy="98" r="22" fill="#4338CA"/>
+  <!-- 5-pointed star -->
+  <polygon points="98,80 102,92 114,92 104,100 108,112 98,104 88,112 92,100 82,92 94,92" fill="#FBBF24"/>
+</svg>
