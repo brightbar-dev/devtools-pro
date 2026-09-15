@@ -1,14 +1,6 @@
-import { createExtPay, resolveProStatus, type PaymentUser } from '@brightbar-dev/wxt-extpay/helpers';
-import { TOOLS, isProTool } from '@/utils/tools';
+import { TOOLS } from '@/utils/tools';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
 import { isColorValue } from '@/utils/css-vars';
-
-// These come from wxt.config.ts extpay config, but we read them here for UI display.
-// TODO: once the module generates the config file, import from there instead.
-const PRICE_DISPLAY = '$60';
-const TRIAL_DAYS = 7;
-
-const extpay = createExtPay('devtools-pro');
 
 const toolsGrid = document.getElementById('tools-grid')!;
 const metaPanel = document.getElementById('meta-panel')!;
@@ -42,12 +34,9 @@ function applyTheme(theme: string) {
 
 function renderTools() {
   toolsGrid.innerHTML = TOOLS.map(tool => {
-    const proClass = tool.tier === 'pro' ? ' dtp-pro' : '';
-    const proBadge = tool.tier === 'pro' ? '<span class="dtp-pro-badge">PRO</span>' : '';
-    return `<button class="dtp-tool-btn${proClass}" data-tool="${tool.id}" title="${tool.description}">
+    return `<button class="dtp-tool-btn" data-tool="${tool.id}" title="${tool.description}">
       <span class="dtp-tool-icon">${tool.icon}</span>
       <span class="dtp-tool-name">${tool.name}</span>
-      ${proBadge}
     </button>`;
   }).join('');
 }
@@ -74,23 +63,6 @@ function setupListeners() {
     const toolId = btn.dataset.tool!;
 
     try {
-      // Check pro status for pro tools — call ExtPay directly (not via background
-      // messaging, which has listener conflicts with ExtPay's startBackground)
-      if (isProTool(toolId)) {
-        try {
-          const user = await extpay.getUser();
-          const status = resolveProStatus(user as PaymentUser);
-          if (!status.unlocked) {
-            showProUpsell(!!user.trialStartedAt);
-            return;
-          }
-        } catch (err) {
-          console.error('Pro status check failed:', err);
-          showProUpsell(false);
-          return;
-        }
-      }
-
       // Popup-based tools (show data in popup panel, not content overlay)
       if (toolId === 'meta-tags') { showMetaPanel(); return; }
       if (toolId === 'css-vars') { showCssVarsPanel(); return; }
@@ -474,38 +446,6 @@ async function captureScreenshot() {
   } catch {
     metaContent.innerHTML = '<div class="dtp-empty">Cannot capture this page (restricted page or permission denied)</div>';
   }
-}
-
-function showProUpsell(trialUsed: boolean) {
-  let trialHtml = '';
-  if (!trialUsed) {
-    trialHtml = `<button class="dtp-trial-btn" id="start-trial">Start ${TRIAL_DAYS}-day free trial</button>`;
-  }
-
-  metaContent.innerHTML = `<div class="dtp-upsell">
-    <h3>Unlock Pro Tools</h3>
-    <p>Get access to screenshots, accessibility checker, CSS variables, rulers, grid overlay, and page assets.</p>
-    ${trialHtml}
-    <button class="dtp-buy-btn" id="buy-pro">Unlock Pro — ${PRICE_DISPLAY}</button>
-    <button class="dtp-login-btn" id="login-link">Already purchased? Restore license</button>
-  </div>`;
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'DevTools Pro';
-
-  document.getElementById('buy-pro')?.addEventListener('click', () => {
-    extpay.openPaymentPage();
-  });
-  document.getElementById('start-trial')?.addEventListener('click', () => {
-    extpay.openTrialPage('7-day free trial');
-  });
-  document.getElementById('login-link')?.addEventListener('click', () => {
-    extpay.openLoginPage();
-    metaContent.innerHTML = `<div class="dtp-upsell">
-      <h3>Restore License</h3>
-      <p>A new tab has opened. Enter the email you used to purchase, then come back here and reopen this popup.</p>
-    </div>`;
-  });
 }
 
 function escapeHtml(str: string): string {
