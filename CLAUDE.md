@@ -1,14 +1,14 @@
 # DevTools Pro — Browser Extension
 
 ## What This Is
-All-in-one developer browser toolkit: CSS inspection, color picking, font detection, spacing visualization, element info, page meta, screenshots, accessibility, CSS variables, rulers, grid overlay, and page assets. All 12 tools are free.
+All-in-one developer browser toolkit: CSS inspection, color picking, font detection, spacing visualization, element info, page meta, screenshots, accessibility, CSS variables, rulers, grid overlay, and page assets. Plus Live Edit with undo. Every tool is free.
 
 Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2) from one codebase.
 
 ## Architecture
 - **entrypoints/content.ts** — The on-page inspector. Not a manifest content script: it is `registration: 'runtime'` (with no `matches`, which WXT would turn into host permissions) and the popup injects it with `scripting.executeScript` into the tab the user opened the popup on. Hover tools inject into every frame. It draws the outline, floating panel and tool bar inside a closed shadow root on a `<dtp-inspector>` host, and answers the popup's page collectors (meta, CSS variables, accessibility, assets).
 - **entrypoints/background.ts** — Service worker: tab capture, settings storage, and the relay that carries a tool switch, exit or pin from one frame to every frame of its tab.
-- **entrypoints/popup/** — Tool launcher: 3x4 grid of tool buttons, popup panels for the page tools, a notice on pages the browser does not let extensions touch. Dark/light theme.
+- **entrypoints/popup/** — Tool launcher: grid of 13 tool buttons (Live Edit spans the last row), popup panels for the page tools, a notice on pages the browser does not let extensions touch. Dark/light theme.
 - **entrypoints/options/** — Settings page (theme, compact mode).
 - **utils/tools.ts** — Tool definitions and kinds (`hover`, `page`, `capture`); `getTool`/`getHoverTool` throw `UnknownToolError` for ids that are not tools.
 - **utils/inspect.ts** — Panel content for the hover tools, built from `InspectTarget` (a DOM-free view of an element) into a plain `PanelModel`.
@@ -16,6 +16,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/messages.ts** — Message shapes between popup, background and inspector; validation of frame postMessage traffic.
 - **utils/measure.ts** — Distance guides between an anchor and a target box (gaps and insets), drag ruler rect, length labels.
 - **utils/overlay-geometry.ts** — Drawn overlay geometry: margin/padding bands, grid tracks/gaps/named areas (with content distribution), flex gaps.
+- **utils/edits.ts** — Live Edit history: gesture-merged steps, undo/redo, reset element or all (undoable), net changes, changes as CSS.
+- **utils/edit-form.ts** — The Live Edit form's state and escaped markup, colour-input and value conversion.
 - **utils/capture.ts** — Screenshot tiles for tall captures, device-pixel crops, file names, data-URL decoding.
 - **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
@@ -51,6 +53,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **CSS Inspector**: Computed values by category with initial values hidden (including zero margins/paddings and colours of zero-width borders). Under each value, the authored source when a same-origin rule set it: `var(--space-md) · .grid-demo · site.css`, or `style="" · inline`. Rules come from the element's root (document or shadow root) including adopted sheets, with `@media`/`@supports` evaluated and `@layer`/`@container` flattened; flattened rules are cached per root until the sheets change. Tool-bar actions: **Copy CSS (C)** copies the element's styles as a rule; **Copy Tailwind (T)** copies classes and lists anything not mapped. Both show what was copied in a pinned panel.
 - **Color Picker**: Hovering shows text, background and border colours in hex, rgb, hsl and oklch. The background is the effective one behind the element: transparent layers are walked out to the first opaque background, and translucent ones are blended. Contrast is shown with AA/AAA for normal and large text; an image or gradient background points to the eyedropper instead. Tool-bar actions: **Eyedropper (E)** uses the native `EyeDropper` API (no permission, secure pages) to sample any pixel, shows it in all formats with contrast on white and black, and keeps recent picks in `storage.local`. **Palette (P)** lists every distinct computed colour on the page by role with use counts; click a swatch to copy, or copy all as CSS custom properties.
 - **Tool actions**: A hover tool's `actions` appear in the on-page tool bar with single-key shortcuts (ignored while typing in a field). Panels that are not about an element (palette, eyedropper result) sit above the tool bar and stay pinned until the page is clicked.
+- **Live Edit**: Click an element to edit its text (only when it has no child elements), margin and padding per side, text and background colour, and font size. Edits are inline `!important` declarations applied as you type; each focus or drag is one undo step. ⌘/Ctrl+Z undoes and ⇧⌘Z or Ctrl+Y redoes; Reset element and Reset all are themselves undoable; Copy changes as CSS exports the net changes per element with an id or `:nth-of-type` path selector. The history lives in the content script until the page reloads, across tool switches. Keys typed into the form are never treated as tool shortcuts.
 - **Screenshot**: The popup offers Visible area (captured by the background, saved and copied from the popup), Full page, and One element. Full page and element captures run in the page (`utils/capture.ts` plans the tiles): scroll with `behavior: 'instant'`, capture each viewport through the background at most twice a second (Chrome's `captureVisibleTab` limit), crop by devicePixelRatio and stitch on an `OffscreenCanvas`, hiding our own UI throughout and fixed/sticky elements after the first tile (from the start for an element). Results download through an anchor in our shadow root (no `downloads` permission), are copied as `image/png` when the page allows, and a toast reports the file and size. Captures stop at 16,000 CSS px. **S** captures the hovered element from any hover tool.
 - **Accessibility**: The content script walks the document and every open or closed shadow root. It measures the contrast of each visible text element against its effective background (disabled controls and visually hidden text are skipped; up to 4000 elements), and collects alt text, link/button names, form labels, positive tabindex, heading order and landmarks. Every finding keeps its elements in a registry, so the popup's Highlight buttons outline them on the page (Esc or 8 s clears). Issues carry a WCAG 2.2 reference, marked best practice where it is guidance rather than a failure.
 - **CSS Variables**: Extracts all `--` properties from page stylesheets (same-origin), groups by scope, color swatches for color values, click to copy
@@ -61,7 +64,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **Page Assets**: Lists images, scripts, stylesheets, fonts used on the page
 
 ## Monetization
-- Free for everyone: all 12 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta, Screenshot, Accessibility, CSS Variables, Rulers, Grid Overlay, Page Assets). No payment code ships in the package.
+- Free for everyone: all 13 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta, Screenshot, Accessibility, CSS Variables, Measure, Grid Overlay, Page Assets, Live Edit). No payment code ships in the package.
 - Ruling (Ken, 2026-09-15): keep the whole extension free for now; a Pro tier may come later. Sunk cost — no hosting/server bills to recoup. If a paid tier is added, see brightbar-dev/org-work `RUNBOOK.md` § "Adding a paid tier later" for the checklist (ExtensionPay registration, re-adding `wxt-extpay`, CWS Payments toggle, etc.).
 
 ## Commands

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { TOOLS, HOVER_TOOLS, findTool, getTool, getHoverTool, UnknownToolError } from '../utils/tools';
 
 describe('TOOLS', () => {
-  it('has 12 tools total, all available with no payment state', () => {
-    expect(TOOLS.length).toBe(12);
+  it('has 13 tools total, all available with no payment state', () => {
+    expect(TOOLS.length).toBe(13);
   });
 
   it('all tools have unique ids', () => {
@@ -25,7 +25,7 @@ describe('TOOLS', () => {
   });
 
   it('classifies every tool by how it runs', () => {
-    expect(HOVER_TOOLS.map(t => t.id)).toEqual(['css-inspect', 'color-picker', 'font-detect', 'spacing', 'element-info', 'rulers', 'grid-overlay']);
+    expect(HOVER_TOOLS.map(t => t.id)).toEqual(['css-inspect', 'color-picker', 'font-detect', 'spacing', 'element-info', 'rulers', 'grid-overlay', 'live-edit']);
     expect(TOOLS.filter(t => t.kind === 'page').map(t => t.id)).toEqual(['meta-tags', 'accessibility', 'css-vars', 'assets']);
     expect(TOOLS.filter(t => t.kind === 'capture').map(t => t.id)).toEqual(['screenshot']);
   });

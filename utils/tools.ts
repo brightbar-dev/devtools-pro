@@ -1,4 +1,4 @@
-/** Tool definitions for DevTools Pro. All 12 tools are available to everyone. */
+/** Tool definitions for DevTools Pro. Every tool is available to everyone. */
 
 /**
  * How a tool runs:
@@ -64,6 +64,11 @@ export const TOOLS: Tool[] = [
     hint: 'Click a container to keep its overlay',
   },
   { id: 'assets', name: 'Page Assets', shortName: 'Assets', icon: '📦', description: 'List images, fonts, scripts, stylesheets', kind: 'page' },
+  {
+    id: 'live-edit', name: 'Live Edit', shortName: 'Edit', icon: '✎', kind: 'hover',
+    description: 'Edit text, spacing, colours and font size on the page, with undo',
+    hint: 'Click an element to edit it',
+  },
 ];
 
 /** The on-page inspectors, in toolbar order. */

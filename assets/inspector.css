@@ -308,6 +308,81 @@
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
 
+/* Live Edit form. */
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 300px;
+  padding: 4px 2px 2px;
+}
+
+.ef-row { display: flex; flex-direction: column; gap: 4px; }
+
+.ef-row > span,
+.ef-colors label > span {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #94a3b8;
+}
+
+.edit-form textarea,
+.edit-form input[type="number"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.edit-form textarea { resize: vertical; min-height: 40px; }
+
+.edit-form input:focus-visible,
+.edit-form textarea:focus-visible,
+.edit-form button:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 1px; }
+
+.ef-sides { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ef-side { display: flex; align-items: center; gap: 3px; }
+.ef-side > span { width: 8px; font-size: 10px; color: #94a3b8; }
+
+.ef-colors { flex-direction: row; gap: 8px; }
+.ef-colors label { display: flex; flex: 1; flex-direction: column; gap: 4px; }
+
+.ef-colors input[type="color"] {
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  background: #0f172a;
+  cursor: pointer;
+}
+
+.ef-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.ef-actions button {
+  appearance: none;
+  border: 1px solid #3b3b5c;
+  border-radius: 5px;
+  background: #2a2a40;
+  color: #e2e8f0;
+  padding: 4px 8px;
+  font: 11px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+}
+
+.ef-actions button:hover:not(:disabled) { background: #3b3b5c; }
+.ef-actions button:disabled { opacity: 0.45; cursor: default; }
+.ef-actions [data-edit-action="done"] { margin-left: auto; background: #4f46e5; border-color: #4f46e5; color: #fff; }
+
+.ef-note { margin: 0; font-size: 10px; color: #94a3b8; }
+
 /* Drawn overlays: spacing regions, grid and flex layout, measurements. */
 .drawings {
   position: fixed;
