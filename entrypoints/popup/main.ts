@@ -1,5 +1,6 @@
 import { TOOLS, getTool, type Tool } from '@/utils/tools';
-import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
+import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon, type AccessibilityData, type WcagRef } from '@/utils/accessibility';
+import type { ContrastFinding, ManualContrastCheck } from '@/utils/contrast';
 import { isColorValue } from '@/utils/css-vars';
 import { escapeHtml } from '@/utils/dom';
 import { restrictionForError, restrictionForUrl, type Restriction, type RestrictionContext } from '@/utils/restrictions';
@@ -17,6 +18,8 @@ const metaBack = document.getElementById('meta-back')!;
 const optionsLink = document.getElementById('options-link')!;
 
 let activeTool: string | null = null;
+/** The tab a popup panel was built for; highlight requests go there. */
+let panelTabId: number | null = null;
 let restrictionCtx: RestrictionContext = { browserName: 'Chrome', isFirefox: import.meta.env.FIREFOX };
 
 async function init() {
@@ -110,7 +113,14 @@ function setupListeners() {
 
   // One delegated copy handler for every popup panel.
   metaContent.addEventListener('click', (e) => {
-    const row = (e.target as HTMLElement).closest('[data-copy]');
+    const target = e.target as HTMLElement;
+    const highlightBtn = target.closest<HTMLElement>('[data-highlight]');
+    if (highlightBtn && panelTabId !== null) {
+      const ids = (highlightBtn.dataset.highlight ?? '').split(',').map(Number).filter(Number.isInteger);
+      void browser.tabs.sendMessage(panelTabId, { action: 'dtp:highlight', ids } satisfies InspectorMessage, { frameId: 0 }).catch(() => {});
+      return;
+    }
+    const row = target.closest('[data-copy]');
     if (!row) return;
     navigator.clipboard.writeText(row.getAttribute('data-copy') || '').catch(() => {});
     row.classList.add('dtp-copied');
@@ -209,6 +219,7 @@ async function collect<T>(tabId: number, what: CollectKind): Promise<T> {
 }
 
 async function showPageTool(tool: Tool, tabId: number) {
+  panelTabId = tabId;
   switch (tool.id) {
     case 'meta-tags': return showMetaPanel(tabId);
     case 'css-vars': return showCssVarsPanel(tabId);
@@ -301,7 +312,8 @@ async function showCssVarsPanel(tabId: number) {
 
 async function showAccessibilityPanel(tabId: number) {
   showPanel('Accessibility', '<div class="dtp-loading">Analyzing...</div>');
-  const data = await collect<any>(tabId, 'accessibility');
+  const data = await collect<AccessibilityData>(tabId, 'accessibility');
+  const { contrast } = data;
 
   const headings = analyzeHeadings(data.headings || []);
   const issues = analyzeIssues({
@@ -315,7 +327,10 @@ async function showAccessibilityPanel(tabId: number) {
     buttonsWithoutText: data.buttonsWithoutText,
     formInputsWithoutLabel: data.formInputsWithoutLabel,
     tabindexPositive: data.tabindexPositive,
-    contrastIssues: 0,
+    contrastIssues: contrast.failAA.length,
+    contrastAAAOnly: contrast.failAAAOnly.length,
+    contrastManual: contrast.manual.length,
+    contrastChecked: contrast.checked,
     htmlLang: data.htmlLang,
     titleText: data.titleText,
   });
@@ -331,16 +346,21 @@ async function showAccessibilityPanel(tabId: number) {
 
   html += '<div class="dtp-a11y-issues">';
   for (const issue of sorted) {
+    const ids = issue.group ? data.groups[issue.group] ?? [] : [];
+    const highlight = ids.length > 0 ? highlightButton(ids, ids.length === 1 ? 'Highlight' : `Highlight ${Math.min(ids.length, 50)}`) : '';
     html += `<div class="dtp-a11y-issue dtp-a11y-${issue.type}">
-      <span class="dtp-a11y-icon">${issueIcon(issue.type)}</span>
+      <span class="dtp-a11y-icon" aria-hidden="true">${issueIcon(issue.type)}</span>
       <div class="dtp-a11y-body">
         <span class="dtp-a11y-cat">${escapeHtml(issue.category)}</span>
         <span class="dtp-a11y-msg">${escapeHtml(issue.message)}</span>
         ${issue.details ? `<span class="dtp-a11y-details">${escapeHtml(issue.details)}</span>` : ''}
+        <span class="dtp-a11y-actions">${wcagLink(issue.wcag)}${highlight}</span>
       </div>
     </div>`;
   }
   html += '</div>';
+
+  html += contrastSection(contrast);
 
   if (headings.length > 0) {
     html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Heading Structure</div>';
@@ -355,13 +375,63 @@ async function showAccessibilityPanel(tabId: number) {
     html += '</div>';
   }
 
-  if (data.ariaRolesUsed && data.ariaRolesUsed.length > 0) {
+  if (data.ariaRolesUsed.length > 0) {
     html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">ARIA Roles (${data.ariaRolesUsed.length})</div>`;
-    html += `<div class="dtp-a11y-tags">${data.ariaRolesUsed.map((r: string) => `<span class="dtp-a11y-tag">${escapeHtml(r)}</span>`).join('')}</div>`;
+    html += `<div class="dtp-a11y-tags">${data.ariaRolesUsed.map(r => `<span class="dtp-a11y-tag">${escapeHtml(r)}</span>`).join('')}</div>`;
     html += '</div>';
   }
 
   metaContent.innerHTML = html;
+}
+
+function wcagLink(ref: WcagRef | undefined): string {
+  if (!ref) return '';
+  const label = `WCAG ${ref.id} ${ref.bestPractice ? '· best practice' : ref.level}`;
+  return `<a class="dtp-wcag" href="${escapeHtml(ref.url)}" target="_blank" rel="noopener" title="${escapeHtml(`${ref.id} ${ref.name}`)}">${escapeHtml(label)}</a>`;
+}
+
+function highlightButton(ids: number[], label: string): string {
+  return `<button type="button" class="dtp-highlight-btn" data-highlight="${ids.slice(0, 50).join(',')}">${escapeHtml(label)}</button>`;
+}
+
+function contrastRow(f: ContrastFinding): string {
+  return `<div class="dtp-contrast-row">
+    <span class="dtp-contrast-sample" style="color:${escapeHtml(f.fg)};background:${escapeHtml(f.bg)}" aria-hidden="true">Aa</span>
+    <div class="dtp-contrast-body">
+      <span class="dtp-contrast-ratio"><strong>${f.ratio.toFixed(2)}:1</strong> · needs ${f.required}:1${f.large ? ' (large text)' : ''}</span>
+      <span class="dtp-contrast-text">${escapeHtml(f.text)}</span>
+      <span class="dtp-contrast-sel">${escapeHtml(f.fg)} on ${escapeHtml(f.bg)} · ${escapeHtml(f.selector)}</span>
+    </div>
+    ${highlightButton([f.id], 'Highlight')}
+  </div>`;
+}
+
+function manualRow(m: ManualContrastCheck): string {
+  return `<div class="dtp-contrast-row">
+    <div class="dtp-contrast-body">
+      <span class="dtp-contrast-text">${escapeHtml(m.text)}</span>
+      <span class="dtp-contrast-sel">${escapeHtml(m.selector)}</span>
+    </div>
+    ${highlightButton([m.id], 'Highlight')}
+  </div>`;
+}
+
+function contrastSection(c: AccessibilityData['contrast']): string {
+  const LIMIT = 50;
+  const more = (n: number) => (n > LIMIT ? `<div class="dtp-note">and ${n - LIMIT} more</div>` : '');
+  let html = `<div class="dtp-meta-group"><div class="dtp-meta-group-name">Text contrast · ${c.checked} measured${c.truncated ? ' (first 4000 elements)' : ''}</div>`;
+  html += c.failAA.length === 0
+    ? '<div class="dtp-note">No measured text is below WCAG AA.</div>'
+    : c.failAA.slice(0, LIMIT).map(contrastRow).join('') + more(c.failAA.length);
+  if (c.manual.length > 0) {
+    html += `<details class="dtp-details" open><summary>${c.manual.length} on images or gradients — check by eye</summary>`
+      + c.manual.slice(0, LIMIT).map(manualRow).join('') + more(c.manual.length) + '</details>';
+  }
+  if (c.failAAAOnly.length > 0) {
+    html += `<details class="dtp-details"><summary>${c.failAAAOnly.length} pass AA but not AAA</summary>`
+      + c.failAAAOnly.slice(0, LIMIT).map(contrastRow).join('') + more(c.failAAAOnly.length) + '</details>';
+  }
+  return html + '</div>';
 }
 
 async function showAssetsPanel(tabId: number) {

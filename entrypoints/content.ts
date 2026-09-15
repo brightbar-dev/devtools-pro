@@ -4,10 +4,13 @@ import { renderPanelHtml } from '@/utils/panel-render';
 import { HOVER_TOOLS, getHoverTool } from '@/utils/tools';
 import { coalesceToFrames } from '@/utils/schedule';
 import { frameContentOffset, placePanel, sameRect, toRect, translateRect, type Rect } from '@/utils/geometry';
-import { elementSelector, escapeHtml, type PathSegment } from '@/utils/dom';
+import { elementSelector, escapeHtml, formatPath, textPreview, type PathSegment } from '@/utils/dom';
 import { parsePx } from '@/utils/spacing';
 import { isGenericFont } from '@/utils/fonts';
 import type { CssVariable } from '@/utils/css-vars';
+import { parseColor, type RGBA } from '@/utils/colors';
+import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/utils/contrast';
+import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
 import {
   FRAME_PROTOCOL, parseFrameMessage,
   type BroadcastRequest, type CollectKind, type FrameMessage, type InspectorMessage, type InspectorReply,
@@ -21,6 +24,7 @@ interface Ui {
   overlay: HTMLDivElement;
   panel: HTMLDivElement;
   bar: HTMLDivElement;
+  highlights: HTMLDivElement;
 }
 
 type Shown =
@@ -309,9 +313,12 @@ export default defineContentScript({
       bar.className = 'bar';
       bar.setAttribute('role', 'toolbar');
       bar.setAttribute('aria-label', 'DevTools Pro tools');
-      root.append(overlay, panel, bar);
+      const highlights = document.createElement('div');
+      highlights.className = 'highlights';
+      highlights.setAttribute('aria-hidden', 'true');
+      root.append(highlights, overlay, panel, bar);
       root.addEventListener('click', onUiClick);
-      return { host, root, overlay, panel, bar };
+      return { host, root, overlay, panel, bar, highlights };
     }
 
     function attachUi() {
@@ -346,6 +353,8 @@ export default defineContentScript({
       ui.host.remove();
       ui.overlay.style.display = 'none';
       ui.panel.style.display = 'none';
+      ui.bar.replaceChildren();
+      ui.highlights.replaceChildren();
       renderedModel = null;
     }
 
@@ -564,6 +573,7 @@ export default defineContentScript({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('scroll', onScroll, true);
       restoreCursor();
+      clearHighlights();
       detachUi();
     }
 
@@ -631,54 +641,82 @@ export default defineContentScript({
       return { vars, sheetsTotal, sheetsSkipped };
     }
 
-    function collectAccessibilityData() {
-      const images = document.querySelectorAll('img');
-      let imagesWithoutAlt = 0;
-      images.forEach(img => {
-        if (!img.hasAttribute('alt')) imagesWithoutAlt++;
-      });
+    // ── Accessibility audit: collection, contrast, highlight on page ───────
 
-      const headings: Array<{ level: number; text: string }> = [];
-      document.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(h => {
-        headings.push({ level: parseInt(h.tagName.charAt(1), 10), text: (h.textContent || '').trim().slice(0, 80) });
-      });
+    /** Elements behind the last audit's findings; the popup refers to them by index. */
+    let auditTargets: Element[] = [];
+    let highlighted: Element[] = [];
+    let highlightTimer: number | undefined;
+    let highlightFrames = 0;
+
+    const SKIP_TEXT_PARENTS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TITLE', 'OPTION']);
+    const MAX_TEXT_ELEMENTS = 4000;
+
+    /** The document plus every open and closed shadow root in it, except our own. */
+    function allRoots(): Array<Document | ShadowRoot> {
+      const roots: Array<Document | ShadowRoot> = [document];
+      for (let i = 0; i < roots.length; i++) {
+        for (const el of roots[i]!.querySelectorAll('*')) {
+          const shadow = shadowRootOf(el);
+          if (shadow) roots.push(shadow);
+        }
+      }
+      return roots;
+    }
+
+    /** Parent in the rendered (flat) tree: slotted content paints inside its slot. */
+    function flatParent(el: Element): Element | null {
+      return el.assignedSlot ?? composedParent(el);
+    }
+
+    function hasAccessibleName(el: Element): boolean {
+      return Boolean((el.textContent || '').trim()
+        || el.getAttribute('aria-label')?.trim()
+        || el.getAttribute('aria-labelledby')
+        || el.getAttribute('title')?.trim()
+        || el.querySelector('img[alt]:not([alt=""]), svg title'));
+    }
+
+    function collectAccessibilityData(): AccessibilityData {
+      auditTargets = [];
+      const register = (el: Element) => auditTargets.push(el) - 1;
+      const groups: AccessibilityData['groups'] = {};
+      const group = (name: HighlightGroup, els: Element[]) => {
+        if (els.length > 0) groups[name] = els.map(register);
+        return els.length;
+      };
+      const roots = allRoots();
+      const all = <E extends Element = Element>(selector: string): E[] =>
+        roots.flatMap(root => Array.from(root.querySelectorAll<E>(selector)));
+
+      const images = all<HTMLImageElement>('img');
+      const imagesWithoutAlt = group('images-no-alt', images.filter(img => !img.hasAttribute('alt')));
+
+      // Heading order only means something in document order, so headings come from the light DOM.
+      const headingEls = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+      const headings = headingEls.map(h => ({ level: parseInt(h.tagName.charAt(1), 10), text: (h.textContent || '').trim().slice(0, 80) }));
+      group('headings-skipped', analyzeHeadings(headings).flatMap((h, i) => (h.outOfOrder ? [headingEls[i]!] : [])));
 
       const firstLink = document.querySelector('a');
       const hasSkipLink = !!firstLink
         && (firstLink.getAttribute('href') || '').startsWith('#')
         && (firstLink.textContent || '').toLowerCase().includes('skip');
 
-      let linksWithoutText = 0;
-      document.querySelectorAll('a').forEach(a => {
-        const text = (a.textContent || '').trim();
-        if (!text && !a.getAttribute('aria-label') && !a.getAttribute('title') && !a.querySelector('img[alt]')) linksWithoutText++;
-      });
-
-      let buttonsWithoutText = 0;
-      document.querySelectorAll('button, [role="button"]').forEach(btn => {
-        const text = (btn.textContent || '').trim();
-        if (!text && !btn.getAttribute('aria-label') && !btn.getAttribute('title')) buttonsWithoutText++;
-      });
-
-      let formInputsWithoutLabel = 0;
-      document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea').forEach(input => {
+      const linksWithoutText = group('links-no-text', all('a[href]').filter(a => !hasAccessibleName(a)));
+      const buttonsWithoutText = group('buttons-no-text', all('button, [role="button"]').filter(b => !hasAccessibleName(b)));
+      const formInputsWithoutLabel = group('inputs-no-label', all('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]), select, textarea').filter(input => {
         const id = input.getAttribute('id');
-        const hasLabel = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) !== null : false;
-        if (!hasLabel && !input.getAttribute('aria-label') && !input.getAttribute('aria-labelledby') && !input.closest('label')) {
-          formInputsWithoutLabel++;
-        }
-      });
+        const root = input.getRootNode() as Document | ShadowRoot;
+        const labelFor = id ? root.querySelector(`label[for="${CSS.escape(id)}"]`) !== null : false;
+        return !labelFor && !input.closest('label') && !input.getAttribute('aria-label')?.trim()
+          && !input.getAttribute('aria-labelledby') && !input.getAttribute('title')?.trim();
+      }));
+      const tabindexPositive = group('tabindex-positive', all('[tabindex]').filter(el => parseInt(el.getAttribute('tabindex') || '0', 10) > 0));
+      const ariaRoles = new Set(all('[role]').map(el => el.getAttribute('role') || '').filter(Boolean));
 
-      let tabindexPositive = 0;
-      document.querySelectorAll('[tabindex]').forEach(el => {
-        if (parseInt(el.getAttribute('tabindex') || '0', 10) > 0) tabindexPositive++;
-      });
-
-      const ariaRoles = new Set<string>();
-      document.querySelectorAll('[role]').forEach(el => {
-        const role = el.getAttribute('role');
-        if (role) ariaRoles.add(role);
-      });
+      const contrast = auditContrast(roots, register);
+      if (contrast.failAA.length > 0) groups['contrast-aa'] = contrast.failAA.map(f => f.id);
+      if (contrast.manual.length > 0) groups['contrast-manual'] = contrast.manual.map(m => m.id);
 
       return {
         imagesTotal: images.length,
@@ -695,7 +733,135 @@ export default defineContentScript({
         htmlLang: document.documentElement.getAttribute('lang') || '',
         titleText: document.title || '',
         landmarkCount: document.querySelectorAll('main, nav, aside, header, footer, [role="main"], [role="navigation"], [role="complementary"], [role="banner"], [role="contentinfo"]').length,
+        groups,
+        contrast,
       };
+    }
+
+    /** Measure every visible text element against its effective background. */
+    function auditContrast(roots: Array<Document | ShadowRoot>, register: (el: Element) => number): AccessibilityData['contrast'] {
+      const layerCache = new Map<Element, BackgroundLayer>();
+      const layerOf = (el: Element): BackgroundLayer => {
+        let layer = layerCache.get(el);
+        if (!layer) {
+          const cs = window.getComputedStyle(el);
+          const opacity = parseFloat(cs.opacity);
+          layer = { color: parseColor(cs.backgroundColor), image: cs.backgroundImage !== 'none', opacity: Number.isFinite(opacity) ? opacity : 1 };
+          layerCache.set(el, layer);
+        }
+        return layer;
+      };
+
+      const elements: Element[] = [];
+      const samples: TextSample[] = [];
+      const seen = new Set<Element>();
+      let truncated = false;
+      for (const root of roots) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node && !truncated; node = walker.nextNode()) {
+          const el = node.parentElement;
+          const text = node.nodeValue?.trim();
+          if (!el || !text || seen.has(el)) continue;
+          seen.add(el);
+          if (SKIP_TEXT_PARENTS.has(el.tagName) || el.closest(':disabled, [aria-disabled="true"]')) continue;
+          const cs = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 1 || rect.height <= 1 || cs.visibility !== 'visible') continue;
+          if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ opacityProperty: true })) continue;
+          if (samples.length >= MAX_TEXT_ELEMENTS) {
+            truncated = true;
+            break;
+          }
+          const layers: BackgroundLayer[] = [];
+          for (let a: Element | null = el; a; a = flatParent(a)) layers.push(layerOf(a));
+          samples.push({
+            id: elements.push(el) - 1,
+            text: textPreview(text, 60),
+            selector: formatPath(pathOf(el), 3),
+            color: parseColor(cs.getPropertyValue('-webkit-text-fill-color') || cs.color) ?? { r: 0, g: 0, b: 0, a: 1 },
+            layers,
+            fontSizePx: parsePx(cs.fontSize),
+            fontWeight: parseInt(cs.fontWeight, 10) || 400,
+          });
+        }
+      }
+
+      const rootScheme = window.getComputedStyle(document.documentElement).colorScheme;
+      const darkCanvas = /\bdark\b/.test(rootScheme) && (!/\blight\b/.test(rootScheme) || window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const canvas: RGBA = darkCanvas ? { r: 18, g: 18, b: 18, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
+      const audit = auditTextContrast(samples, canvas);
+      const toRegistry = <T extends { id: number }>(items: T[]): T[] => items.map(item => ({ ...item, id: register(elements[item.id]!) }));
+      return {
+        checked: audit.checked,
+        failAA: toRegistry(audit.failAA),
+        failAAAOnly: toRegistry(audit.failAAAOnly),
+        manual: toRegistry(audit.manual),
+        truncated,
+      };
+    }
+
+    function highlight(ids: number[]): number {
+      clearHighlights();
+      highlighted = ids.map(id => auditTargets[id]).filter((el): el is Element => Boolean(el?.isConnected)).slice(0, 50);
+      if (highlighted.length === 0) return 0;
+      attachUi();
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      highlighted[0]!.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+      window.addEventListener('scroll', drawHighlights, { capture: true, passive: true });
+      window.addEventListener('resize', drawHighlights, { passive: true });
+      window.addEventListener('keydown', onHighlightKey, true);
+      highlightFrames = 0;
+      followHighlights();
+      highlightTimer = window.setTimeout(clearHighlights, 8000);
+      return highlighted.length;
+    }
+
+    /** Keep the boxes on their elements through a smooth scroll. */
+    function followHighlights() {
+      drawHighlights();
+      if (highlighted.length > 0 && ++highlightFrames < 60) window.requestAnimationFrame(followHighlights);
+    }
+
+    function drawHighlights() {
+      if (!ui) return;
+      const container = ui.highlights;
+      if (container.childElementCount !== highlighted.length) {
+        const numbered = highlighted.length > 1;
+        container.replaceChildren(...highlighted.map((_, i) => {
+          const box = document.createElement('div');
+          box.className = 'hl';
+          if (numbered) {
+            const label = document.createElement('span');
+            label.className = 'hl-label';
+            label.textContent = String(i + 1);
+            box.append(label);
+          }
+          return box;
+        }));
+      }
+      // Boxes are created once per request and only moved while the page scrolls.
+      highlighted.forEach((el, i) => {
+        const r = el.getBoundingClientRect();
+        const box = container.children[i] as HTMLElement;
+        box.style.transform = `translate(${r.left - 3}px, ${r.top - 3}px)`;
+        box.style.width = `${r.width + 6}px`;
+        box.style.height = `${r.height + 6}px`;
+      });
+    }
+
+    function onHighlightKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') clearHighlights();
+    }
+
+    function clearHighlights() {
+      window.clearTimeout(highlightTimer);
+      window.removeEventListener('scroll', drawHighlights, true);
+      window.removeEventListener('resize', drawHighlights);
+      window.removeEventListener('keydown', onHighlightKey, true);
+      const had = highlighted.length > 0;
+      highlighted = [];
+      ui?.highlights.replaceChildren();
+      if (had && activeTool === null) detachUi();
     }
 
     function collectPageAssets(): { images: number; scripts: number; stylesheets: number; fonts: string[] } {
@@ -742,6 +908,9 @@ export default defineContentScript({
         case 'dtp:collect':
           if (isTop) sendResponse(collect(message.what));
           return false;
+        case 'dtp:highlight':
+          if (isTop) sendResponse({ ok: true, found: highlight(message.ids) } satisfies InspectorReply);
+          return false;
         default:
           return false;
       }
@@ -759,6 +928,7 @@ export default defineContentScript({
         }
       },
       destroy: () => {
+        clearHighlights();
         deactivate();
         window.removeEventListener('message', onWindowMessage);
         try {

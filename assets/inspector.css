@@ -226,7 +226,45 @@
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
 
+/* Accessibility findings highlighted on the page. */
+.highlights {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.hl {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border: 3px solid #f97316;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 16px rgba(249, 115, 22, 0.6);
+  animation: dtp-pulse 1.2s ease-in-out 3;
+}
+
+.hl-label {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #f97316;
+  color: #111827;
+  font: 700 11px/20px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-align: center;
+}
+
+@keyframes dtp-pulse {
+  50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 28px rgba(249, 115, 22, 0.95); }
+}
+
 /* Toolbar: the active tool chip, tool switcher, status, and close. */
+.bar:empty { display: none; }
+
 .bar {
   position: fixed;
   left: 50%;

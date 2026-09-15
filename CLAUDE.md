@@ -17,14 +17,15 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
 - **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
-- **utils/colors.ts** — Color parsing (hex, rgb, hsl, named), conversion, WCAG contrast ratio and rating.
+- **utils/colors.ts** — Color parsing (hex, rgb, hsl, named, and the `oklch`/`oklab`/`lab`/`lch`/`color()` forms Chrome returns for modern CSS), compositing, hex/rgb/hsl/oklch output, WCAG contrast ratio and rating.
+- **utils/contrast.ts** — Page-wide text contrast: effective background behind text (translucent layers composited, images and gradients flagged for a manual check), WCAG large-text rules, AA/AAA audit.
 - **utils/css.ts** — CSS property categorization (7 categories), default value detection, formatting.
 - **utils/fonts.ts** — Font stack parsing, weight naming, shorthand generation.
 - **utils/spacing.ts** — Box model measurement, px parsing, sides formatting.
 - **utils/dom.ts** — Element selector generation, composed-path formatting, meta tag categorization.
 - **utils/css-vars.ts** — CSS custom property extraction, categorization, filtering.
 - **utils/assets.ts** — Page asset collection (images, scripts, stylesheets, fonts).
-- **utils/accessibility.ts** — Accessibility analysis (headings, landmarks, ARIA, alt text, labels).
+- **utils/accessibility.ts** — Accessibility analysis (contrast, alt text, labels, headings, landmarks, focus order) with WCAG 2.2 references and highlight groups.
 - **assets/inspector.css** — The inspector's shadow-root stylesheet, imported `?inline` and adopted as a constructed sheet.
 
 ## Key Implementation Details
@@ -40,7 +41,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 
 ## More tool notes
 - **Screenshot**: Uses `browser.tabs.captureVisibleTab()`, auto-downloads as PNG
-- **Accessibility**: Content script collects heading structure, landmarks, ARIA roles, alt text, form labels, tabindex; utils analyze and generate issue report with severity levels
+- **Accessibility**: The content script walks the document and every open or closed shadow root. It measures the contrast of each visible text element against its effective background (disabled controls and visually hidden text are skipped; up to 4000 elements), and collects alt text, link/button names, form labels, positive tabindex, heading order and landmarks. Every finding keeps its elements in a registry, so the popup's Highlight buttons outline them on the page (Esc or 8 s clears). Issues carry a WCAG 2.2 reference, marked best practice where it is guidance rather than a failure.
 - **CSS Variables**: Extracts all `--` properties from page stylesheets (same-origin), groups by scope, color swatches for color values, click to copy
 - **Rulers**: Hover-based measurement showing element dimensions, distance to parent, sibling gaps
 - **Grid Overlay**: Inspect grid/flexbox properties on containers; show child flex/grid item properties for non-container elements

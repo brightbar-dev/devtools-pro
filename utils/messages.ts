@@ -10,12 +10,15 @@ export type InspectorMessage =
   | { action: 'dtp:deactivate' }
   | { action: 'dtp:pin'; pinned: boolean }
   | { action: 'dtp:state' }
-  | { action: 'dtp:collect'; what: CollectKind };
+  | { action: 'dtp:collect'; what: CollectKind }
+  | { action: 'dtp:highlight'; ids: number[] };
 
 export interface InspectorReply {
   ok: boolean;
   error?: string;
   activeTool?: string | null;
+  /** How many elements a highlight request found on the page. */
+  found?: number;
 }
 
 /** Sent by a frame to the background, which relays `message` to every frame of the sender's tab. */
