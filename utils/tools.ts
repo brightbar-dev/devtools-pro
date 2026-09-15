@@ -50,7 +50,7 @@ export const TOOLS: Tool[] = [
   { id: 'spacing', name: 'Spacing', shortName: 'Spacing', icon: '⬜', description: 'Margins and padding drawn on the page, with values', kind: 'hover' },
   { id: 'element-info', name: 'Element Info', shortName: 'Element', icon: '<>', description: 'Tag, classes, dimensions, position', kind: 'hover' },
   { id: 'meta-tags', name: 'Page Meta', shortName: 'Meta', icon: 'ℹ', description: 'View meta tags, Open Graph, viewport', kind: 'page' },
-  { id: 'screenshot', name: 'Screenshot', shortName: 'Shot', icon: '📸', description: 'Capture the visible part of the page as PNG', kind: 'capture' },
+  { id: 'screenshot', name: 'Screenshot', shortName: 'Shot', icon: '📸', description: 'Visible area, full page, or one element, saved as PNG and copied', kind: 'capture' },
   { id: 'accessibility', name: 'Accessibility', shortName: 'A11y', icon: 'A11y', description: 'Audit contrast, alt text, labels, headings and landmarks, with WCAG references', kind: 'page' },
   { id: 'css-vars', name: 'CSS Variables', shortName: 'Vars', icon: '--', description: 'List all CSS custom properties', kind: 'page' },
   {

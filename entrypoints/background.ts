@@ -22,8 +22,13 @@ export default defineBackground(() => {
     };
 
     switch (msg?.action) {
-      case 'captureTab':
-        return reply(browser.tabs.captureVisibleTab({ format: 'png' }));
+      case 'captureTab': {
+        // From the page, capture the window that tab is in; from the popup, the current window.
+        const windowId = sender.tab?.windowId;
+        return reply(windowId === undefined
+          ? browser.tabs.captureVisibleTab({ format: 'png' })
+          : browser.tabs.captureVisibleTab(windowId, { format: 'png' }));
+      }
       case 'getSettings':
         return reply(browser.storage.local.get(['theme', 'compactMode']));
       case 'saveSettings':

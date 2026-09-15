@@ -5,6 +5,7 @@ import { isColorValue } from '@/utils/css-vars';
 import { escapeHtml } from '@/utils/dom';
 import { restrictionForError, restrictionForUrl, type Restriction, type RestrictionContext } from '@/utils/restrictions';
 import type { CollectKind, InspectorMessage, InspectorReply } from '@/utils/messages';
+import { dataUrlBytes, screenshotFilename } from '@/utils/capture';
 
 /** The inspector bundle, injected on demand; it is not a manifest content script. */
 const INSPECTOR_FILE = '/content-scripts/content.js';
@@ -114,6 +115,11 @@ function setupListeners() {
   // One delegated copy handler for every popup panel.
   metaContent.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+    const shotBtn = target.closest<HTMLElement>('[data-shot]');
+    if (shotBtn?.dataset.shot) {
+      void runScreenshot(shotBtn.dataset.shot);
+      return;
+    }
     const highlightBtn = target.closest<HTMLElement>('[data-highlight]');
     if (highlightBtn && panelTabId !== null) {
       const ids = (highlightBtn.dataset.highlight ?? '').split(',').map(Number).filter(Number.isInteger);
@@ -162,7 +168,7 @@ async function onToolClick(toolId: string) {
   }
 
   if (tool.kind === 'capture') {
-    await captureScreenshot();
+    showScreenshotPanel();
     return;
   }
 
@@ -195,9 +201,9 @@ async function inject(tabId: number, allFrames: boolean): Promise<number[]> {
   return results.map(r => r.frameId);
 }
 
-async function startHoverTool(tool: Tool, tabId: number) {
+async function startHoverTool(tool: Tool, tabId: number, hint?: string) {
   const frameIds = await inject(tabId, true);
-  const message: InspectorMessage = { action: 'dtp:activate', toolId: tool.id };
+  const message: InspectorMessage = { action: 'dtp:activate', toolId: tool.id, hint };
   const replies = await Promise.all(frameIds.map(frameId =>
     browser.tabs.sendMessage(tabId, message, { frameId })
       .then(reply => ({ frameId, reply: reply as InspectorReply | undefined, error: undefined as unknown }))
@@ -464,7 +470,39 @@ async function showAssetsPanel(tabId: number) {
   metaContent.innerHTML = html;
 }
 
-async function captureScreenshot() {
+function showScreenshotPanel() {
+  showPanel('Screenshot', `<div class="dtp-shot-options">
+    <button type="button" class="dtp-shot-btn" data-shot="visible"><strong>Visible area</strong><span>What is on screen now</span></button>
+    <button type="button" class="dtp-shot-btn" data-shot="page"><strong>Full page</strong><span>Scrolls and stitches the whole page</span></button>
+    <button type="button" class="dtp-shot-btn" data-shot="element"><strong>One element</strong><span>Hover it on the page, then press S</span></button>
+  </div>
+  <p class="dtp-note">Saved as PNG and copied to the clipboard.</p>`);
+}
+
+async function runScreenshot(kind: string) {
+  try {
+    const tab = await activeTab();
+    const restriction = restrictionForUrl(tab.url, restrictionCtx);
+    if (restriction) {
+      showError(restriction.message, 'Screenshot');
+      return;
+    }
+    if (kind === 'visible') {
+      await captureVisible(tab.url);
+    } else if (kind === 'page') {
+      await inject(tab.id, false);
+      await browser.tabs.sendMessage(tab.id, { action: 'dtp:capture-page' } satisfies InspectorMessage, { frameId: 0 });
+      window.close(); // the page does the scrolling and saving
+    } else if (kind === 'element') {
+      await startHoverTool(getTool('element-info'), tab.id, 'Hover an element and press S to capture it');
+      window.close();
+    }
+  } catch (err) {
+    showError(restrictionForError(err, restrictionCtx).message, 'Screenshot');
+  }
+}
+
+async function captureVisible(tabUrl: string | undefined) {
   showPanel('Screenshot', '<div class="dtp-loading">Capturing...</div>');
   const result = await browser.runtime.sendMessage({ action: 'captureTab' }).catch((err: unknown) => ({ error: String((err as Error)?.message ?? err) }));
   if (typeof result !== 'string') {
@@ -473,14 +511,30 @@ async function captureScreenshot() {
     return;
   }
 
+  let host = '';
+  try {
+    host = new URL(tabUrl ?? '').hostname;
+  } catch {
+    host = '';
+  }
+  const name = screenshotFilename('visible', host, new Date());
   const a = document.createElement('a');
   a.href = result;
-  a.download = `screenshot-${Date.now()}.png`;
+  a.download = name;
   a.click();
+
+  let copied = false;
+  try {
+    const { mime, bytes } = dataUrlBytes(result);
+    await navigator.clipboard.write([new ClipboardItem({ [mime]: new Blob([bytes], { type: mime }) })]);
+    copied = true;
+  } catch {
+    copied = false;
+  }
 
   metaContent.innerHTML = `<div class="dtp-screenshot-preview">
     <img src="${result}" alt="Screenshot of the visible page" style="width:100%;border-radius:4px;margin:8px 0;">
-    <div class="dtp-empty">Screenshot saved to downloads</div>
+    <div class="dtp-empty">Saved ${escapeHtml(name)}${copied ? ' and copied to the clipboard' : ''}</div>
   </div>`;
 }
 
