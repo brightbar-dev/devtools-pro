@@ -46,7 +46,11 @@ export const TOOLS: Tool[] = [
       { id: 'palette', label: 'Palette', key: 'p', description: 'Every colour used on this page' },
     ],
   },
-  { id: 'font-detect', name: 'Font Detector', shortName: 'Font', icon: 'Aa', description: 'Detect fonts, sizes, weights on any element', kind: 'hover' },
+  {
+    id: 'font-detect', name: 'Font Detector', shortName: 'Font', icon: 'Aa', kind: 'hover',
+    description: 'The font actually rendered, size in px and rem; every font on the page',
+    actions: [{ id: 'fonts', label: 'Page fonts', key: 'i', description: 'Every font rendered on this page, with weights and sizes' }],
+  },
   { id: 'spacing', name: 'Spacing', shortName: 'Spacing', icon: '⬜', description: 'Margins and padding drawn on the page, with values', kind: 'hover' },
   { id: 'element-info', name: 'Element Info', shortName: 'Element', icon: '<>', description: 'Tag, classes, dimensions, position', kind: 'hover' },
   { id: 'meta-tags', name: 'Page Meta', shortName: 'Meta', icon: 'ℹ', description: 'View meta tags, Open Graph, viewport', kind: 'page' },

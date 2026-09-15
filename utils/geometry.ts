@@ -50,11 +50,12 @@ export function sameRect(a: Rect | null, b: Rect | null, epsilon = 0.5): boolean
 }
 
 /**
- * Place a floating panel near a target without covering it. Tries below, above, right and
+ * Place a floating panel near a target without covering it (or anything in `avoid`, such as the
+ * tool bar). Tries below, above, right and
  * left of the target (kept inside the viewport) and takes the first spot that fits and does
  * not overlap the target; when none does, takes the viewport corner that covers it least.
  */
-export function placePanel(target: Rect, panel: Size, viewport: Size, gap = 8, margin = 8): Point {
+export function placePanel(target: Rect, panel: Size, viewport: Size, gap = 8, margin = 8, avoid: Rect[] = []): Point {
   const maxLeft = Math.max(margin, viewport.width - panel.width - margin);
   const maxTop = Math.max(margin, viewport.height - panel.height - margin);
   const clampLeft = (x: number) => Math.min(Math.max(x, margin), maxLeft);
@@ -68,8 +69,9 @@ export function placePanel(target: Rect, panel: Size, viewport: Size, gap = 8, m
   ];
   const fits = (p: Point) => p.left >= margin && p.top >= margin
     && p.left + panel.width <= viewport.width - margin && p.top + panel.height <= viewport.height - margin;
+  const clear = (p: Point) => overlapArea({ ...p, ...panel }, target) === 0 && avoid.every(a => overlapArea({ ...p, ...panel }, a) === 0);
   for (const p of beside) {
-    if (fits(p) && overlapArea({ ...p, ...panel }, target) === 0) return p;
+    if (fits(p) && clear(p)) return p;
   }
 
   const corners: Point[] = [
@@ -81,7 +83,7 @@ export function placePanel(target: Rect, panel: Size, viewport: Size, gap = 8, m
   let best = corners[0]!;
   let bestArea = Infinity;
   for (const p of corners) {
-    const area = overlapArea({ ...p, ...panel }, target);
+    const area = overlapArea({ ...p, ...panel }, target) + avoid.reduce((sum, a) => sum + overlapArea({ ...p, ...panel }, a), 0);
     if (area < bestArea) {
       best = p;
       bestArea = area;

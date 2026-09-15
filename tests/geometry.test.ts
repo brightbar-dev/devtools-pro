@@ -46,6 +46,14 @@ describe('placePanel', () => {
     }
   });
 
+  it('never covers the tool bar when another spot exists', () => {
+    const bar = { left: 300, top: 740, width: 700, height: 40 };
+    const target = { left: 20, top: 620, width: 200, height: 40 };
+    const p = placePanel(target, { width: 300, height: 400 }, viewport, 8, 8, [bar]);
+    expect(overlapArea({ ...p, width: 300, height: 400 }, bar)).toBe(0);
+    expect(overlapArea({ ...p, width: 300, height: 400 }, target)).toBe(0);
+  });
+
   it('falls back to the corner that covers the least of a viewport-sized target', () => {
     const target = { left: 0, top: 0, width: 1000, height: 700 };
     expect(placePanel(target, panel, viewport)).toEqual({ left: 792, top: 692 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { authoredDetail, buildPanelModel, boxModelOf, selectorOf, type InspectTarget, type PanelBlock, type PanelModel } from '../utils/inspect';
+import { authoredDetail, buildPanelModel, boxModelOf, selectorOf, siblingGap, toRem, type InspectTarget, type PanelBlock, type PanelModel } from '../utils/inspect';
 import { UnknownToolError } from '../utils/tools';
 import type { Rect } from '../utils/geometry';
 
@@ -165,6 +165,17 @@ describe('Font Detector', () => {
     expect(rowValue(model, 'Size')).toBe('32px/40px');
     expect(rowValue(model, 'Weight')).toBe('700 (Bold)');
     expect(rowValue(model, 'Style')).toBeUndefined();
+    expect(rowValue(model, 'Rendered')).toBeUndefined();
+  });
+
+  it('says which family actually renders and gives sizes in rem', () => {
+    const t = fake({ styles: { 'font-family': 'Inter, system-ui, sans-serif', 'font-size': '24px', 'line-height': '36px', 'font-weight': '400' } });
+    const missing = buildPanelModel('font-detect', t, { ...ctx, rootFontSize: 16, renderedFont: 'system-ui' });
+    expect(rowValue(missing, 'Rendered')).toBe('system-ui · Inter is not available');
+    expect(rowValue(missing, 'In rem')).toBe('1.5rem/2.25rem');
+    const present = buildPanelModel('font-detect', t, { ...ctx, renderedFont: 'Inter' });
+    expect(rowValue(present, 'Rendered')).toBe('Inter (available)');
+    expect(toRem('normal', 16)).toBe('');
   });
 });
 
@@ -211,8 +222,14 @@ describe('Rulers', () => {
     expect(rowValue(model, 'Right')).toBe('890px to right');
     expect(rowValue(model, 'Top', 'Distance to Parent')).toBe('56px');
     expect(rowValue(model, 'Bottom', 'Distance to Parent')).toBe('304px');
-    expect(rowValue(model, 'Above', 'Sibling Gaps')).toBe('16px gap');
-    expect(rowValue(model, 'Below', 'Sibling Gaps')).toBe('24px gap');
+    expect(rowValue(model, 'Previous sibling', 'Sibling Gaps')).toBe('16px above');
+    expect(rowValue(model, 'Next sibling', 'Sibling Gaps')).toBe('24px below');
+  });
+
+  it('measures side-by-side siblings horizontally instead of reporting negative gaps', () => {
+    expect(siblingGap({ left: 416, top: 0, width: 384, height: 36 }, { left: 16, top: 0, width: 384, height: 36 })).toBe('16px to the left');
+    expect(siblingGap({ left: 16, top: 0, width: 384, height: 36 }, { left: 416, top: 0, width: 384, height: 36 })).toBe('16px to the right');
+    expect(siblingGap({ left: 0, top: 0, width: 50, height: 50 }, { left: 10, top: 10, width: 50, height: 50 })).toBe('overlapping');
   });
 });
 

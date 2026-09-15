@@ -1,4 +1,6 @@
 import { TOOLS, getTool, type Tool } from '@/utils/tools';
+import { toolIcon } from '@/utils/icons';
+import { gridLayout, moveFocus } from '@/utils/grid-nav';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon, type AccessibilityData, type WcagRef } from '@/utils/accessibility';
 import type { ContrastFinding, ManualContrastCheck } from '@/utils/contrast';
 import { isColorValue } from '@/utils/css-vars';
@@ -17,6 +19,9 @@ const metaContent = document.getElementById('meta-content')!;
 const metaTitle = document.getElementById('meta-title')!;
 const metaBack = document.getElementById('meta-back')!;
 const optionsLink = document.getElementById('options-link')!;
+const toolDescription = document.getElementById('tool-description')!;
+const DESCRIPTION_HINT = 'Hover or focus a tool to see what it does · arrow keys move';
+const layout = gridLayout(TOOLS.length, 3, new Set(TOOLS.flatMap((t, i) => (t.id === 'live-edit' ? [i] : []))));
 
 let activeTool: string | null = null;
 /** The tab a popup panel was built for; highlight requests go there. */
@@ -33,6 +38,8 @@ async function init() {
   }
   renderTools();
   setupListeners();
+  document.getElementById('version')!.textContent = `v${browser.runtime.getManifest().version}`;
+  toolDescription.textContent = DESCRIPTION_HINT;
 
   restrictionCtx = { browserName: browserName(), isFirefox: import.meta.env.FIREFOX, fileAccessAllowed: await fileAccessAllowed() };
   const tab = await activeTab().catch(() => null);
@@ -44,6 +51,9 @@ async function init() {
   } else {
     await refreshActiveTool(tab.id);
   }
+  // Arrow keys work straight away: focus the active tool, or the first.
+  const start = toolsGrid.querySelector<HTMLButtonElement>('.dtp-tool-btn.dtp-active') ?? toolsGrid.querySelector<HTMLButtonElement>('.dtp-tool-btn');
+  if (toolsGrid.style.display !== 'none') start?.focus();
 }
 
 /** The browser withholds the URL of pages we may not touch; a no-op injection tells us why. */
@@ -80,16 +90,21 @@ function applyTheme(theme: string) {
 }
 
 function renderTools() {
-  toolsGrid.innerHTML = TOOLS.map(tool => {
-    return `<button class="dtp-tool-btn" data-tool="${tool.id}" title="${escapeHtml(tool.description)}">
-      <span class="dtp-tool-icon">${tool.icon}</span>
+  toolsGrid.innerHTML = TOOLS.map(tool => `<button type="button" class="dtp-tool-btn" data-tool="${tool.id}" aria-describedby="desc-${tool.id}" aria-pressed="false">
+      <span class="dtp-tool-icon">${toolIcon(tool.id)}</span>
       <span class="dtp-tool-name">${escapeHtml(tool.name)}</span>
-    </button>`;
-  }).join('');
+      <span class="dtp-visually-hidden" id="desc-${tool.id}">${escapeHtml(tool.description)}</span>
+    </button>`).join('');
+}
+
+function describeTool(button: HTMLElement | null) {
+  const tool = button?.dataset.tool ? TOOLS.find(t => t.id === button.dataset.tool) : undefined;
+  toolDescription.textContent = tool ? `${tool.name}: ${tool.description}` : DESCRIPTION_HINT;
 }
 
 function showPanel(title: string, html: string) {
   toolsGrid.style.display = 'none';
+  toolDescription.hidden = true;
   pageNotice.hidden = true;
   metaPanel.style.display = 'block';
   metaTitle.textContent = title;
@@ -106,8 +121,23 @@ function setupListeners() {
     if (btn?.dataset.tool) void onToolClick(btn.dataset.tool);
   });
 
+  toolsGrid.addEventListener('keydown', (e) => {
+    const buttons = [...toolsGrid.querySelectorAll<HTMLButtonElement>('.dtp-tool-btn')];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (index < 0) return;
+    const next = moveFocus(layout, index, e.key);
+    if (next !== index) {
+      e.preventDefault();
+      buttons[next]?.focus();
+    }
+  });
+  toolsGrid.addEventListener('focusin', e => describeTool((e.target as HTMLElement).closest('.dtp-tool-btn')));
+  toolsGrid.addEventListener('mouseover', e => describeTool((e.target as HTMLElement).closest('.dtp-tool-btn')));
+  toolsGrid.addEventListener('mouseleave', () => describeTool(toolsGrid.querySelector(':focus')));
+
   metaBack.addEventListener('click', () => {
     metaPanel.style.display = 'none';
+    toolDescription.hidden = false;
     toolsGrid.style.display = '';
     pageNotice.hidden = !pageNotice.textContent;
   });

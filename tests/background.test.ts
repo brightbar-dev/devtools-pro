@@ -51,6 +51,23 @@ describe('background message handlers — free for everyone', () => {
   });
 });
 
+describe('background first run', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.restoreAllMocks();
+  });
+
+  it('opens the welcome page on install, and not on update', async () => {
+    const create = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as any);
+    const background = await import('../entrypoints/background');
+    background.default.main();
+    await fakeBrowser.runtime.onInstalled.trigger({ reason: 'update', previousVersion: '0.3.0' } as any);
+    expect(create).not.toHaveBeenCalled();
+    await fakeBrowser.runtime.onInstalled.trigger({ reason: 'install' } as any);
+    expect(create).toHaveBeenCalledWith({ url: expect.stringMatching(/\/welcome\.html$/) });
+  });
+});
+
 describe('background frame relay', () => {
   beforeEach(() => {
     fakeBrowser.reset();

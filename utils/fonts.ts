@@ -56,6 +56,14 @@ export function toFontShorthand(info: FontInfo): string {
   return parts.join(' ');
 }
 
+/** The family the browser actually renders: the first available one in the stack. Generic families always render. */
+export function renderedFamily(stack: string[], isAvailable: (family: string) => boolean): string {
+  for (const family of stack) {
+    if (isGenericFont(family) || isAvailable(family)) return family;
+  }
+  return 'serif (browser default)';
+}
+
 /** Check if a font looks like a system/generic font. */
 export function isGenericFont(name: string): boolean {
   const generic = [
@@ -64,4 +72,10 @@ export function isGenericFont(name: string): boolean {
     'emoji', 'math', 'fangsong',
   ];
   return generic.includes(name.toLowerCase());
+}
+
+/** A px length as a number, or null for anything else (`normal`, percentages). */
+export function parsePxOrNull(value: string): number | null {
+  const match = /^(-?\d*\.?\d+)px$/.exec(value.trim());
+  return match ? parseFloat(match[1]!) : null;
 }
