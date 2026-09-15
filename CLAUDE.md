@@ -75,6 +75,11 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Free for everyone: all 13 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta, Screenshot, Accessibility, CSS Variables, Measure, Grid Overlay, Page Assets, Live Edit). No payment code ships in the package.
 - Ruling (Ken, 2026-09-15): keep the whole extension free for now; a Pro tier may come later. Sunk cost — no hosting/server bills to recoup. If a paid tier is added, see brightbar-dev/org-work `RUNBOOK.md` § "Adding a paid tier later" for the checklist (ExtensionPay registration, re-adding `wxt-extpay`, CWS Payments toggle, etc.).
 
+## Store listing
+- `store/cws.json` holds the listing text, single purpose and permission justifications; keep the justifications in step with `wxt.config.ts`.
+- `store/screenshots/` (five 1280×800) and `store/promo/` (440×280, 1400×560) are PNGs without alpha, captured from the real built extension on a fictional demo page (`store/capture/demo/`, never a real brand's site).
+- Regenerate after UI changes: `npx wxt build`, then `PLAYWRIGHT=<path to playwright index.mjs> CHROME=<Chrome for Testing binary> node store/capture/capture.mjs`. It needs ImageMagick (`magick`) to flatten alpha. Uploading to the Web Store dashboard is a manual step.
+
 ## Commands
 ```bash
 npm run dev          # Dev mode with HMR (Chrome)
