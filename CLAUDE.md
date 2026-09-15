@@ -6,32 +6,39 @@ All-in-one developer browser toolkit: CSS inspection, color picking, font detect
 Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2) from one codebase.
 
 ## Architecture
-- **entrypoints/content.ts** — Content script injected on all pages. Provides inspector overlay and floating info panel. Supports multiple tool modes (CSS, color, font, spacing, element info). All injected elements use `dtp-` prefix.
-- **entrypoints/background.ts** — Service worker for tab capture, settings storage, tool state management.
-- **entrypoints/popup/** — Tool launcher dashboard. 3x4 grid of tool buttons, meta panel view. Dark/light theme.
+- **entrypoints/content.ts** — The on-page inspector. Not a manifest content script: it is `registration: 'runtime'` (with no `matches`, which WXT would turn into host permissions) and the popup injects it with `scripting.executeScript` into the tab the user opened the popup on. Hover tools inject into every frame. It draws the outline, floating panel and tool bar inside a closed shadow root on a `<dtp-inspector>` host, and answers the popup's page collectors (meta, CSS variables, accessibility, assets).
+- **entrypoints/background.ts** — Service worker: tab capture, settings storage, and the relay that carries a tool switch, exit or pin from one frame to every frame of its tab.
+- **entrypoints/popup/** — Tool launcher: 3x4 grid of tool buttons, popup panels for the page tools, a notice on pages the browser does not let extensions touch. Dark/light theme.
 - **entrypoints/options/** — Settings page (theme, compact mode).
+- **utils/tools.ts** — Tool definitions and kinds (`hover`, `page`, `capture`); `getTool`/`getHoverTool` throw `UnknownToolError` for ids that are not tools.
+- **utils/inspect.ts** — Panel content for the hover tools, built from `InspectTarget` (a DOM-free view of an element) into a plain `PanelModel`.
+- **utils/panel-render.ts** — `PanelModel` → escaped HTML; style values are vetted and carried in `data-dtp-style`.
+- **utils/messages.ts** — Message shapes between popup, background and inspector; validation of frame postMessage traffic.
+- **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
+- **utils/schedule.ts** — Coalesces events to one run per animation frame.
+- **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
 - **utils/colors.ts** — Color parsing (hex, rgb, hsl, named), conversion, WCAG contrast ratio and rating.
 - **utils/css.ts** — CSS property categorization (7 categories), default value detection, formatting.
 - **utils/fonts.ts** — Font stack parsing, weight naming, shorthand generation.
 - **utils/spacing.ts** — Box model measurement, px parsing, sides formatting.
-- **utils/dom.ts** — Element selector generation, path building, meta tag categorization.
-- **utils/tools.ts** — Tool definitions, free/pro tier logic.
+- **utils/dom.ts** — Element selector generation, composed-path formatting, meta tag categorization.
 - **utils/css-vars.ts** — CSS custom property extraction, categorization, filtering.
 - **utils/assets.ts** — Page asset collection (images, scripts, stylesheets, fonts).
 - **utils/accessibility.ts** — Accessibility analysis (headings, landmarks, ARIA, alt text, labels).
-- **assets/inspector.css** — Floating panel styles (dark theme, box model viz, color swatches).
+- **assets/inspector.css** — The inspector's shadow-root stylesheet, imported `?inline` and adopted as a constructed sheet.
 
 ## Key Implementation Details
-- Inspector activates via popup tool button, injects overlay + panel on hover
-- Escape key deactivates inspector
-- Click on color values copies to clipboard
-- Box model visualization with nested colored layers (margin/border/padding/content)
-- WCAG contrast ratio calculated between text color and background
-- CSS properties organized by category, defaults hidden for compact display
-- Font preview renders in actual detected font
-- All DOM elements prefixed with `dtp-` to avoid host page conflicts
+- **No host permissions, nothing runs until asked.** The manifest has `activeTab`, `storage` and `scripting` only, and no content script, so installing shows no "read and change all your data" warning and pages where no tool was picked carry no inspector code. Clicking the toolbar icon grants `activeTab` for that tab; picking a tool injects. After a navigation the grant is gone until the icon is clicked again.
+- **Isolation.** Everything drawn on a page lives in a closed shadow root. The host's inline `!important` styles beat page CSS, the sheet is adopted (not subject to page CSP), and panel swatches and font previews are applied through CSSOM because CSP can block `style` attributes. The host is shown in the top layer (popover) so page dialogs do not cover it.
+- **Hover.** Pointer moves are coalesced to one update per animation frame. The same element is not rebuilt; builders read only the properties their tool shows.
+- **Frames.** A same-origin frame's inspector posts hover reports (rect plus `PanelModel`) to its parent, which checks the sender is one of its own frame elements, translates the rect, and draws in the top document. `activeTab` covers the top origin only, so cross-origin frames are not injected; their frame element is still inspectable.
+- **Shadow DOM.** Hit-testing descends through open and closed shadow roots (`chrome.dom.openOrClosedShadowRoot`, Firefox `openOrClosedShadowRoot`), and the panel shows the composed path with `#shadow-root` and frame boundaries.
+- **Controls.** Esc exits in every frame; clicking the page pins the panel (click again to release); the on-page tool bar switches hover tools and closes; clicking a value copies it (with a selection-copy fallback when the Clipboard API is refused).
+- **Loud failures.** An unknown tool id throws `UnknownToolError` instead of showing the CSS panel. Restricted pages (`chrome://`, the Web Store, file URLs without file access) get a plain explanation in the popup.
+- **Messaging.** Listeners reply through `sendResponse` (and `return true` when async), which every supported Chrome and Firefox version handles.
+- Box model visualization with nested colored layers (margin/border/padding/content); WCAG contrast between text color and background; CSS properties organized by category with defaults hidden; font preview renders in the detected font.
 
-## Pro Tools Implementation
+## More tool notes
 - **Screenshot**: Uses `browser.tabs.captureVisibleTab()`, auto-downloads as PNG
 - **Accessibility**: Content script collects heading structure, landmarks, ARIA roles, alt text, form labels, tabindex; utils analyze and generate issue report with severity levels
 - **CSS Variables**: Extracts all `--` properties from page stylesheets (same-origin), groups by scope, color swatches for color values, click to copy
@@ -56,11 +63,11 @@ npm run test:watch   # Watch mode
 
 ## Testing
 ```bash
-npm test
+npm test            # Vitest unit tests
+npx tsc --noEmit    # type check (CI runs it too)
 ```
-- 171 unit tests via Vitest + WXT testing plugin
-- 10 test files covering: colors (32), css (21), fonts (17), spacing (16), dom (19), tools (4), css-vars (22), assets (16), accessibility (21), background (3)
-- Mostly pure utility logic; background.test.ts uses `wxt/testing/fake-browser` to exercise the message handlers
+- Logic lives in `utils/` and is tested in Node without a DOM (run `npm test` for the current count). `background.test.ts` uses `wxt/testing/fake-browser` to exercise the message handlers and the frame relay.
+- The content script and popup are verified by hand in Chrome for Testing for each PR; the PR body records what was checked and the before/after evidence. Chrome's `Extensions.triggerAction` (CDP, with `--enable-unsafe-extension-debugging`) clicks the toolbar icon for real, so the `activeTab` grant can be exercised headless. Verify install warnings with `chrome.management.getPermissionWarningsByManifest` from any extension page.
 
 ## Conventions
 - WXT framework with vanilla TypeScript (no UI framework)

@@ -48,6 +48,17 @@ body {
   color: var(--dtp-primary);
 }
 
+.dtp-page-notice {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--dtp-fail) 40%, var(--dtp-border));
+  background: color-mix(in srgb, var(--dtp-fail) 8%, var(--dtp-surface));
+  color: var(--dtp-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .dtp-tools {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -152,6 +163,14 @@ body {
 .dtp-meta-val {
   flex: 1;
   word-break: break-all;
+}
+
+.dtp-error { color: var(--dtp-fail); }
+
+.dtp-note {
+  font-size: 11px;
+  color: var(--dtp-text-secondary);
+  margin-top: 6px;
 }
 
 .dtp-loading, .dtp-empty {

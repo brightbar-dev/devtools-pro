@@ -92,11 +92,12 @@ export function analyzeIssues(data: {
       message: 'No headings found on page',
     });
   }
-  if (data.headings.length > 0 && data.headings[0].level !== 1) {
+  const firstHeading = data.headings[0];
+  if (firstHeading && firstHeading.level !== 1) {
     issues.push({
       type: 'warning',
       category: 'Headings',
-      message: `First heading is h${data.headings[0].level}, expected h1`,
+      message: `First heading is h${firstHeading.level}, expected h1`,
     });
   }
 

@@ -1,8 +1,15 @@
-import { TOOLS } from '@/utils/tools';
+import { TOOLS, getTool, type Tool } from '@/utils/tools';
 import { analyzeHeadings, analyzeIssues, computeStats, sortIssues, issueIcon } from '@/utils/accessibility';
 import { isColorValue } from '@/utils/css-vars';
+import { escapeHtml } from '@/utils/dom';
+import { restrictionForError, restrictionForUrl, type Restriction, type RestrictionContext } from '@/utils/restrictions';
+import type { CollectKind, InspectorMessage, InspectorReply } from '@/utils/messages';
+
+/** The inspector bundle, injected on demand; it is not a manifest content script. */
+const INSPECTOR_FILE = '/content-scripts/content.js';
 
 const toolsGrid = document.getElementById('tools-grid')!;
+const pageNotice = document.getElementById('page-notice')!;
 const metaPanel = document.getElementById('meta-panel')!;
 const metaContent = document.getElementById('meta-content')!;
 const metaTitle = document.getElementById('meta-title')!;
@@ -10,6 +17,7 @@ const metaBack = document.getElementById('meta-back')!;
 const optionsLink = document.getElementById('options-link')!;
 
 let activeTool: string | null = null;
+let restrictionCtx: RestrictionContext = { browserName: 'Chrome', isFirefox: import.meta.env.FIREFOX };
 
 async function init() {
   try {
@@ -21,6 +29,41 @@ async function init() {
   }
   renderTools();
   setupListeners();
+
+  restrictionCtx = { browserName: browserName(), isFirefox: import.meta.env.FIREFOX, fileAccessAllowed: await fileAccessAllowed() };
+  const tab = await activeTab().catch(() => null);
+  if (!tab) return;
+  const restriction = restrictionForUrl(tab.url, restrictionCtx) ?? (tab.url ? null : await probeAccess(tab.id));
+  if (restriction) {
+    pageNotice.textContent = restriction.message;
+    pageNotice.hidden = false;
+  } else {
+    await refreshActiveTool(tab.id);
+  }
+}
+
+/** The browser withholds the URL of pages we may not touch; a no-op injection tells us why. */
+async function probeAccess(tabId: number): Promise<Restriction | null> {
+  try {
+    await browser.scripting.executeScript({ target: { tabId }, func: () => true });
+    return null;
+  } catch (err) {
+    return restrictionForError(err, restrictionCtx);
+  }
+}
+
+function browserName(): string {
+  if (import.meta.env.FIREFOX) return 'Firefox';
+  const brands = (navigator as Navigator & { userAgentData?: { brands: Array<{ brand: string }> } }).userAgentData?.brands ?? [];
+  return ['Microsoft Edge', 'Brave', 'Opera'].find(name => brands.some(b => b.brand === name)) ?? 'Chrome';
+}
+
+async function fileAccessAllowed(): Promise<boolean | undefined> {
+  try {
+    return await browser.extension.isAllowedFileSchemeAccess();
+  } catch {
+    return undefined;
+  }
 }
 
 function applyTheme(theme: string) {
@@ -34,117 +77,144 @@ function applyTheme(theme: string) {
 
 function renderTools() {
   toolsGrid.innerHTML = TOOLS.map(tool => {
-    return `<button class="dtp-tool-btn" data-tool="${tool.id}" title="${tool.description}">
+    return `<button class="dtp-tool-btn" data-tool="${tool.id}" title="${escapeHtml(tool.description)}">
       <span class="dtp-tool-icon">${tool.icon}</span>
-      <span class="dtp-tool-name">${tool.name}</span>
+      <span class="dtp-tool-name">${escapeHtml(tool.name)}</span>
     </button>`;
   }).join('');
 }
 
-function showError(msg: string) {
+function showPanel(title: string, html: string) {
   toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'Error';
-  metaContent.innerHTML = `<div class="dtp-empty" style="color:var(--dtp-fail)">${escapeHtml(msg)}</div>`;
-}
-
-function showStatus(title: string, msg: string) {
-  toolsGrid.style.display = 'none';
+  pageNotice.hidden = true;
   metaPanel.style.display = 'block';
   metaTitle.textContent = title;
-  metaContent.innerHTML = `<div class="dtp-empty">${escapeHtml(msg)}</div>`;
+  metaContent.innerHTML = html;
+}
+
+function showError(msg: string, title = 'Error') {
+  showPanel(title, `<div class="dtp-empty dtp-error">${escapeHtml(msg)}</div>`);
 }
 
 function setupListeners() {
-  toolsGrid.addEventListener('click', async (e) => {
-    const btn = (e.target as HTMLElement).closest('.dtp-tool-btn') as HTMLElement;
-    if (!btn) return;
-
-    const toolId = btn.dataset.tool!;
-
-    try {
-      // Popup-based tools (show data in popup panel, not content overlay)
-      if (toolId === 'meta-tags') { showMetaPanel(); return; }
-      if (toolId === 'css-vars') { showCssVarsPanel(); return; }
-      if (toolId === 'accessibility') { showAccessibilityPanel(); return; }
-      if (toolId === 'assets') { showAssetsPanel(); return; }
-      if (toolId === 'screenshot') { captureScreenshot(); return; }
-
-      // Toggle active state for overlay-based tools
-      if (activeTool === toolId) {
-        deactivateTool();
-      } else {
-        activateTool(toolId);
-      }
-    } catch (err) {
-      console.error('Tool click failed:', err);
-      showError(`Tool "${toolId}" failed: ${(err as Error).message || 'Unknown error'}`);
-    }
+  toolsGrid.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.dtp-tool-btn') as HTMLElement | null;
+    if (btn?.dataset.tool) void onToolClick(btn.dataset.tool);
   });
 
   metaBack.addEventListener('click', () => {
     metaPanel.style.display = 'none';
     toolsGrid.style.display = '';
+    pageNotice.hidden = !pageNotice.textContent;
+  });
+
+  // One delegated copy handler for every popup panel.
+  metaContent.addEventListener('click', (e) => {
+    const row = (e.target as HTMLElement).closest('[data-copy]');
+    if (!row) return;
+    navigator.clipboard.writeText(row.getAttribute('data-copy') || '').catch(() => {});
+    row.classList.add('dtp-copied');
+    setTimeout(() => row.classList.remove('dtp-copied'), 800);
   });
 
   optionsLink.addEventListener('click', (e) => {
     e.preventDefault();
     browser.runtime.openOptionsPage().catch((err) => {
       console.error('Failed to open options page:', err);
-      // Fallback: open options.html directly
-      browser.tabs.create({ url: browser.runtime.getURL('options.html') });
+      void browser.tabs.create({ url: browser.runtime.getURL('/options.html') });
     });
   });
 }
 
-async function activateTool(toolId: string) {
-  activeTool = toolId;
+async function activeTab(): Promise<{ id: number; url?: string }> {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) throw new Error('No active tab found');
+  return { id: tab.id, url: tab.url };
+}
+
+async function refreshActiveTool(tabId: number) {
+  try {
+    const reply = await browser.tabs.sendMessage(tabId, { action: 'dtp:state' } satisfies InspectorMessage, { frameId: 0 }) as InspectorReply | undefined;
+    activeTool = reply?.activeTool ?? null;
+  } catch {
+    activeTool = null; // nothing injected on this page yet
+  }
   updateActiveState();
+}
+
+async function onToolClick(toolId: string) {
+  let tool: Tool;
+  try {
+    tool = getTool(toolId);
+  } catch (err) {
+    showError((err as Error).message);
+    return;
+  }
+
+  if (tool.kind === 'capture') {
+    await captureScreenshot();
+    return;
+  }
 
   try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      showStatus(toolId, 'No active tab found');
+    const tab = await activeTab();
+    const restriction = restrictionForUrl(tab.url, restrictionCtx);
+    if (restriction) {
+      showError(restriction.message, 'Not available here');
       return;
     }
-    await browser.tabs.sendMessage(tab.id, { action: 'activateTool', toolId });
-    // Show feedback — tool is active on the page
-    showStatus('Active', 'Hover over elements on the page to inspect. Press Escape to deactivate.');
-  } catch {
-    // Content script not injected — try programmatic injection
-    try {
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-      if (tab?.id) {
-        await browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content-scripts/content.js'],
-        });
-        await browser.scripting.insertCSS({
-          target: { tabId: tab.id },
-          files: ['content-scripts/content.css'],
-        });
-        // Retry the activation
-        await browser.tabs.sendMessage(tab.id, { action: 'activateTool', toolId });
-        showStatus('Active', 'Hover over elements on the page to inspect. Press Escape to deactivate.');
-      }
-    } catch (err) {
-      console.error('Failed to inject content script:', err);
-      showError('Cannot inspect this page. Try refreshing the page first.');
+    if (tool.kind === 'page') {
+      await showPageTool(tool, tab.id);
+    } else if (activeTool === tool.id) {
+      await browser.tabs.sendMessage(tab.id, { action: 'dtp:deactivate' } satisfies InspectorMessage).catch(() => {});
+      activeTool = null;
+      updateActiveState();
+    } else {
+      await startHoverTool(tool, tab.id);
+      window.close(); // get out of the way so the page can be hovered
     }
+  } catch (err) {
+    console.error(`Tool "${toolId}" failed:`, err);
+    showError(restrictionForError(err, restrictionCtx).message, 'Not available here');
   }
 }
 
-async function deactivateTool() {
-  activeTool = null;
-  updateActiveState();
+/** Inject the inspector (into every frame for hover tools) and return the frames that accepted it. */
+async function inject(tabId: number, allFrames: boolean): Promise<number[]> {
+  const results = await browser.scripting.executeScript({ target: { tabId, allFrames }, files: [INSPECTOR_FILE] });
+  return results.map(r => r.frameId);
+}
 
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      await browser.tabs.sendMessage(tab.id, { action: 'deactivate' });
-    }
-  } catch {
-    // Content script not available — that's OK, just reset local state
+async function startHoverTool(tool: Tool, tabId: number) {
+  const frameIds = await inject(tabId, true);
+  const message: InspectorMessage = { action: 'dtp:activate', toolId: tool.id };
+  const replies = await Promise.all(frameIds.map(frameId =>
+    browser.tabs.sendMessage(tabId, message, { frameId })
+      .then(reply => ({ frameId, reply: reply as InspectorReply | undefined, error: undefined as unknown }))
+      .catch((error: unknown) => ({ frameId, reply: undefined, error }))));
+  const top = replies.find(r => r.frameId === 0);
+  if (!top?.reply?.ok) {
+    if (top?.error) throw top.error;
+    throw new Error(top?.reply?.error ?? 'The inspector did not start on this page');
+  }
+  activeTool = tool.id;
+  updateActiveState();
+}
+
+async function collect<T>(tabId: number, what: CollectKind): Promise<T> {
+  await inject(tabId, false);
+  const reply = await browser.tabs.sendMessage(tabId, { action: 'dtp:collect', what } satisfies InspectorMessage, { frameId: 0 });
+  if (reply === undefined) throw new Error('The page did not answer');
+  return reply as T;
+}
+
+async function showPageTool(tool: Tool, tabId: number) {
+  switch (tool.id) {
+    case 'meta-tags': return showMetaPanel(tabId);
+    case 'css-vars': return showCssVarsPanel(tabId);
+    case 'accessibility': return showAccessibilityPanel(tabId);
+    case 'assets': return showAssetsPanel(tabId);
+    default: throw new Error(`Tool id "${tool.id}" has no popup panel`);
   }
 }
 
@@ -152,304 +222,196 @@ function updateActiveState() {
   toolsGrid.querySelectorAll('.dtp-tool-btn').forEach(btn => {
     const el = btn as HTMLElement;
     el.classList.toggle('dtp-active', el.dataset.tool === activeTool);
+    el.setAttribute('aria-pressed', String(el.dataset.tool === activeTool));
   });
 }
 
-async function showMetaPanel() {
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'Page Meta';
-  metaContent.innerHTML = '<div class="dtp-loading">Loading...</div>';
-
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      metaContent.innerHTML = '<div class="dtp-empty">No active tab</div>';
-      return;
-    }
-
-    const tags = await sendWithFallback(tab.id, { action: 'getMetaTags' });
-    if (!tags || !Array.isArray(tags)) {
-      metaContent.innerHTML = '<div class="dtp-empty">No meta tags found</div>';
-      return;
-    }
-
-    const grouped: Record<string, Array<{ name: string; content: string }>> = {};
-    for (const tag of tags) {
-      const type = tag.type || 'other';
-      if (!grouped[type]) grouped[type] = [];
-      grouped[type].push(tag);
-    }
-
-    let html = '';
-    for (const [type, items] of Object.entries(grouped)) {
-      const label = type === 'og' ? 'Open Graph' : type === 'twitter' ? 'Twitter Cards' : type === 'meta' ? 'Standard' : 'Other';
-      html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">${label}</div>`;
-      for (const item of items) {
-        html += `<div class="dtp-meta-row"><span class="dtp-meta-key">${escapeHtml(item.name)}</span><span class="dtp-meta-val">${escapeHtml(item.content)}</span></div>`;
-      }
-      html += '</div>';
-    }
-    metaContent.innerHTML = html;
-  } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
+async function showMetaPanel(tabId: number) {
+  showPanel('Page Meta', '<div class="dtp-loading">Loading...</div>');
+  const tags = await collect<Array<{ name: string; content: string; type: string }>>(tabId, 'meta');
+  if (!Array.isArray(tags) || tags.length === 0) {
+    metaContent.innerHTML = '<div class="dtp-empty">No meta tags found</div>';
+    return;
   }
+
+  const grouped: Record<string, Array<{ name: string; content: string }>> = {};
+  for (const tag of tags) {
+    const type = tag.type || 'other';
+    (grouped[type] ??= []).push(tag);
+  }
+
+  let html = '';
+  for (const [type, items] of Object.entries(grouped)) {
+    const label = type === 'og' ? 'Open Graph' : type === 'twitter' ? 'Twitter Cards' : type === 'meta' ? 'Standard' : 'Other';
+    html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">${label}</div>`;
+    for (const item of items) {
+      html += `<div class="dtp-meta-row dtp-copyable" data-copy="${escapeHtml(item.content)}"><span class="dtp-meta-key">${escapeHtml(item.name)}</span><span class="dtp-meta-val">${escapeHtml(item.content)}</span></div>`;
+    }
+    html += '</div>';
+  }
+  metaContent.innerHTML = html;
 }
 
-async function showCssVarsPanel() {
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'CSS Variables';
-  metaContent.innerHTML = '<div class="dtp-loading">Scanning...</div>';
+async function showCssVarsPanel(tabId: number) {
+  showPanel('CSS Variables', '<div class="dtp-loading">Scanning...</div>');
+  const result = await collect<{ vars: Array<{ name: string; value: string; scope: string }>; sheetsTotal: number; sheetsSkipped: number }>(tabId, 'css-vars');
+  const vars = result?.vars ?? [];
+  const sheetsSkipped = result?.sheetsSkipped ?? 0;
+  const sheetsTotal = result?.sheetsTotal ?? 0;
+  const skippedNote = `${sheetsSkipped} of ${sheetsTotal} stylesheet${sheetsTotal !== 1 ? 's' : ''}`;
 
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
-
-    const result = await sendWithFallback(tab.id, { action: 'getCssVariables' });
-    // Handle both old format (plain array) and new format (object with metadata)
-    const vars = Array.isArray(result) ? result : (result?.vars || []);
-    const sheetsSkipped = Array.isArray(result) ? 0 : (result?.sheetsSkipped || 0);
-    const sheetsTotal = Array.isArray(result) ? 0 : (result?.sheetsTotal || 0);
-
-    if (vars.length === 0) {
-      let msg = 'No CSS variables found on this page.';
-      if (sheetsSkipped > 0) {
-        msg += `<p style="font-size:11px;color:#94a3b8;margin-top:8px">${sheetsSkipped} of ${sheetsTotal} stylesheet${sheetsTotal !== 1 ? 's' : ''} could not be read (cross-origin). Variables in CDN-hosted CSS are blocked by browser security restrictions.</p>`;
-      }
-      metaContent.innerHTML = `<div class="dtp-empty">${msg}</div>`;
-      return;
-    }
-
-    let corsNote = '';
+  if (vars.length === 0) {
+    let msg = 'No CSS variables found on this page.';
     if (sheetsSkipped > 0) {
-      corsNote = `<div style="font-size:11px;color:#94a3b8;padding:4px 0">${sheetsSkipped} of ${sheetsTotal} stylesheet${sheetsTotal !== 1 ? 's' : ''} skipped (cross-origin)</div>`;
+      msg += `<p class="dtp-note">${skippedNote} could not be read (cross-origin). Variables in CDN-hosted CSS are blocked by browser security restrictions.</p>`;
     }
-    let html = `<div class="dtp-stats-bar">${vars.length} variable${vars.length !== 1 ? 's' : ''} found${corsNote}</div>`;
-
-    // Group by scope
-    const scopeMap = new Map<string, typeof vars>();
-    for (const v of vars) {
-      const existing = scopeMap.get(v.scope) || [];
-      existing.push(v);
-      scopeMap.set(v.scope, existing);
-    }
-
-    // Sort: :root first
-    const sortedScopes = [...scopeMap.entries()].sort(([a], [b]) => {
-      if (a.startsWith(':root')) return -1;
-      if (b.startsWith(':root')) return 1;
-      return a.localeCompare(b);
-    });
-
-    for (const [scope, scopeVars] of sortedScopes) {
-      html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">${escapeHtml(scope)} (${scopeVars.length})</div>`;
-      for (const v of scopeVars) {
-        const swatch = isColorValue(v.value) ? `<span class="dtp-swatch" style="background:${v.value}"></span>` : '';
-        html += `<div class="dtp-meta-row dtp-copyable" data-copy="${escapeHtml(v.name)}: ${escapeHtml(v.value)}">
-          <span class="dtp-meta-key">${escapeHtml(v.name)}</span>
-          <span class="dtp-meta-val">${swatch}${escapeHtml(v.value)}</span>
-        </div>`;
-      }
-      html += '</div>';
-    }
-    metaContent.innerHTML = html;
-
-    // Copy on click
-    metaContent.addEventListener('click', (e) => {
-      const row = (e.target as HTMLElement).closest('[data-copy]');
-      if (row) {
-        navigator.clipboard.writeText(row.getAttribute('data-copy') || '').catch(() => {});
-        row.classList.add('dtp-copied');
-        setTimeout(() => row.classList.remove('dtp-copied'), 800);
-      }
-    });
-  } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
+    metaContent.innerHTML = `<div class="dtp-empty">${msg}</div>`;
+    return;
   }
-}
 
-async function sendWithFallback(tabId: number, message: any): Promise<any> {
-  try {
-    return await browser.tabs.sendMessage(tabId, message);
-  } catch {
-    // Content script not injected — try programmatic injection
-    await browser.scripting.executeScript({
-      target: { tabId },
-      files: ['content-scripts/content.js'],
-    });
-    await browser.scripting.insertCSS({
-      target: { tabId },
-      files: ['content-scripts/content.css'],
-    });
-    return await browser.tabs.sendMessage(tabId, message);
+  let html = `<div class="dtp-stats-bar">${vars.length} variable${vars.length !== 1 ? 's' : ''} found`;
+  if (sheetsSkipped > 0) html += `<div class="dtp-note">${skippedNote} skipped (cross-origin)</div>`;
+  html += '</div>';
+
+  const scopeMap = new Map<string, typeof vars>();
+  for (const v of vars) {
+    const existing = scopeMap.get(v.scope) || [];
+    existing.push(v);
+    scopeMap.set(v.scope, existing);
   }
-}
+  const sortedScopes = [...scopeMap.entries()].sort(([a], [b]) => {
+    if (a.startsWith(':root')) return -1;
+    if (b.startsWith(':root')) return 1;
+    return a.localeCompare(b);
+  });
 
-async function showAccessibilityPanel() {
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'Accessibility';
-  metaContent.innerHTML = '<div class="dtp-loading">Analyzing...</div>';
-
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
-
-    const data = await sendWithFallback(tab.id, { action: 'getAccessibilityData' });
-    if (!data) {
-      metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
-      return;
-    }
-
-    // Process headings
-    const headings = analyzeHeadings(data.headings || []);
-
-    // Build issues
-    const issues = analyzeIssues({
-      imagesWithoutAlt: data.imagesWithoutAlt,
-      imagesTotal: data.imagesTotal,
-      headings,
-      hasMainLandmark: data.hasMainLandmark,
-      hasNavLandmark: data.hasNavLandmark,
-      hasSkipLink: data.hasSkipLink,
-      linksWithoutText: data.linksWithoutText,
-      buttonsWithoutText: data.buttonsWithoutText,
-      formInputsWithoutLabel: data.formInputsWithoutLabel,
-      tabindexPositive: data.tabindexPositive,
-      contrastIssues: 0,
-      htmlLang: data.htmlLang,
-      titleText: data.titleText,
-    });
-
-    const stats = computeStats(issues);
-    const sorted = sortIssues(issues);
-
-    // Stats bar
-    let html = `<div class="dtp-a11y-stats">
-      <span class="dtp-a11y-stat dtp-a11y-error">${stats.errors} error${stats.errors !== 1 ? 's' : ''}</span>
-      <span class="dtp-a11y-stat dtp-a11y-warning">${stats.warnings} warning${stats.warnings !== 1 ? 's' : ''}</span>
-      <span class="dtp-a11y-stat dtp-a11y-info">${stats.info} info</span>
-    </div>`;
-
-    // Issues list
-    html += '<div class="dtp-a11y-issues">';
-    for (const issue of sorted) {
-      const iconText = issueIcon(issue.type);
-      html += `<div class="dtp-a11y-issue dtp-a11y-${issue.type}">
-        <span class="dtp-a11y-icon">${iconText}</span>
-        <div class="dtp-a11y-body">
-          <span class="dtp-a11y-cat">${escapeHtml(issue.category)}</span>
-          <span class="dtp-a11y-msg">${escapeHtml(issue.message)}</span>
-          ${issue.details ? `<span class="dtp-a11y-details">${escapeHtml(issue.details)}</span>` : ''}
-        </div>
+  for (const [scope, scopeVars] of sortedScopes) {
+    html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">${escapeHtml(scope)} (${scopeVars.length})</div>`;
+    for (const v of scopeVars) {
+      const swatch = isColorValue(v.value) ? `<span class="dtp-swatch" style="background:${escapeHtml(v.value)}"></span>` : '';
+      html += `<div class="dtp-meta-row dtp-copyable" data-copy="${escapeHtml(v.name)}: ${escapeHtml(v.value)}">
+        <span class="dtp-meta-key">${escapeHtml(v.name)}</span>
+        <span class="dtp-meta-val">${swatch}${escapeHtml(v.value)}</span>
       </div>`;
     }
     html += '</div>';
-
-    // Heading structure
-    if (headings.length > 0) {
-      html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Heading Structure</div>';
-      for (const h of headings) {
-        const indent = (h.level - 1) * 12;
-        const cls = h.outOfOrder ? ' dtp-a11y-warn-text' : '';
-        html += `<div class="dtp-meta-row${cls}" style="padding-left:${indent}px">
-          <span class="dtp-meta-key">h${h.level}</span>
-          <span class="dtp-meta-val">${escapeHtml(h.text)}</span>
-        </div>`;
-      }
-      html += '</div>';
-    }
-
-    // ARIA roles
-    if (data.ariaRolesUsed && data.ariaRolesUsed.length > 0) {
-      html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">ARIA Roles (${data.ariaRolesUsed.length})</div>`;
-      html += `<div class="dtp-a11y-tags">${data.ariaRolesUsed.map((r: string) => `<span class="dtp-a11y-tag">${escapeHtml(r)}</span>`).join('')}</div>`;
-      html += '</div>';
-    }
-
-    metaContent.innerHTML = html;
-  } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
+  metaContent.innerHTML = html;
 }
 
-async function showAssetsPanel() {
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'Page Assets';
-  metaContent.innerHTML = '<div class="dtp-loading">Scanning...</div>';
+async function showAccessibilityPanel(tabId: number) {
+  showPanel('Accessibility', '<div class="dtp-loading">Analyzing...</div>');
+  const data = await collect<any>(tabId, 'accessibility');
 
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
+  const headings = analyzeHeadings(data.headings || []);
+  const issues = analyzeIssues({
+    imagesWithoutAlt: data.imagesWithoutAlt,
+    imagesTotal: data.imagesTotal,
+    headings,
+    hasMainLandmark: data.hasMainLandmark,
+    hasNavLandmark: data.hasNavLandmark,
+    hasSkipLink: data.hasSkipLink,
+    linksWithoutText: data.linksWithoutText,
+    buttonsWithoutText: data.buttonsWithoutText,
+    formInputsWithoutLabel: data.formInputsWithoutLabel,
+    tabindexPositive: data.tabindexPositive,
+    contrastIssues: 0,
+    htmlLang: data.htmlLang,
+    titleText: data.titleText,
+  });
 
-    const data = await sendWithFallback(tab.id, { action: 'getPageAssets' });
-    if (!data) {
-      metaContent.innerHTML = '<div class="dtp-empty">Cannot analyze this page</div>';
-      return;
-    }
+  const stats = computeStats(issues);
+  const sorted = sortIssues(issues);
 
-    let html = '<div class="dtp-stats-bar">';
-    html += `<span>${data.images} images</span>`;
-    html += `<span>${data.scripts} scripts</span>`;
-    html += `<span>${data.stylesheets} stylesheets</span>`;
-    html += `<span>${data.fonts.length} fonts</span>`;
-    html += '</div>';
+  let html = `<div class="dtp-a11y-stats">
+    <span class="dtp-a11y-stat dtp-a11y-error">${stats.errors} error${stats.errors !== 1 ? 's' : ''}</span>
+    <span class="dtp-a11y-stat dtp-a11y-warning">${stats.warnings} warning${stats.warnings !== 1 ? 's' : ''}</span>
+    <span class="dtp-a11y-stat dtp-a11y-info">${stats.info} info</span>
+  </div>`;
 
-    // Fonts
-    if (data.fonts.length > 0) {
-      html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Fonts Used</div>';
-      for (const font of data.fonts) {
-        html += `<div class="dtp-meta-row">
-          <span class="dtp-meta-val" style="font-family:'${escapeHtml(font)}',sans-serif">${escapeHtml(font)}</span>
-        </div>`;
-      }
-      html += '</div>';
-    }
-
-    html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">Summary</div>
-      <div class="dtp-meta-row"><span class="dtp-meta-key">Images</span><span class="dtp-meta-val">${data.images} (img, picture, svg)</span></div>
-      <div class="dtp-meta-row"><span class="dtp-meta-key">Scripts</span><span class="dtp-meta-val">${data.scripts} external</span></div>
-      <div class="dtp-meta-row"><span class="dtp-meta-key">Stylesheets</span><span class="dtp-meta-val">${data.stylesheets} linked</span></div>
+  html += '<div class="dtp-a11y-issues">';
+  for (const issue of sorted) {
+    html += `<div class="dtp-a11y-issue dtp-a11y-${issue.type}">
+      <span class="dtp-a11y-icon">${issueIcon(issue.type)}</span>
+      <div class="dtp-a11y-body">
+        <span class="dtp-a11y-cat">${escapeHtml(issue.category)}</span>
+        <span class="dtp-a11y-msg">${escapeHtml(issue.message)}</span>
+        ${issue.details ? `<span class="dtp-a11y-details">${escapeHtml(issue.details)}</span>` : ''}
+      </div>
     </div>`;
-
-    metaContent.innerHTML = html;
-  } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot access this page — try refreshing</div>';
   }
+  html += '</div>';
+
+  if (headings.length > 0) {
+    html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Heading Structure</div>';
+    for (const h of headings) {
+      const indent = (h.level - 1) * 12;
+      const cls = h.outOfOrder ? ' dtp-a11y-warn-text' : '';
+      html += `<div class="dtp-meta-row${cls}" style="padding-left:${indent}px">
+        <span class="dtp-meta-key">h${h.level}</span>
+        <span class="dtp-meta-val">${escapeHtml(h.text)}</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (data.ariaRolesUsed && data.ariaRolesUsed.length > 0) {
+    html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">ARIA Roles (${data.ariaRolesUsed.length})</div>`;
+    html += `<div class="dtp-a11y-tags">${data.ariaRolesUsed.map((r: string) => `<span class="dtp-a11y-tag">${escapeHtml(r)}</span>`).join('')}</div>`;
+    html += '</div>';
+  }
+
+  metaContent.innerHTML = html;
+}
+
+async function showAssetsPanel(tabId: number) {
+  showPanel('Page Assets', '<div class="dtp-loading">Scanning...</div>');
+  const data = await collect<{ images: number; scripts: number; stylesheets: number; fonts: string[] }>(tabId, 'assets');
+
+  let html = '<div class="dtp-stats-bar">';
+  html += `<span>${data.images} images</span>`;
+  html += `<span>${data.scripts} scripts</span>`;
+  html += `<span>${data.stylesheets} stylesheets</span>`;
+  html += `<span>${data.fonts.length} fonts</span>`;
+  html += '</div>';
+
+  if (data.fonts.length > 0) {
+    html += '<div class="dtp-meta-group"><div class="dtp-meta-group-name">Fonts Used</div>';
+    for (const font of data.fonts) {
+      html += `<div class="dtp-meta-row dtp-copyable" data-copy="${escapeHtml(font)}">
+        <span class="dtp-meta-val" style="font-family:'${escapeHtml(font)}',sans-serif">${escapeHtml(font)}</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  html += `<div class="dtp-meta-group"><div class="dtp-meta-group-name">Summary</div>
+    <div class="dtp-meta-row"><span class="dtp-meta-key">Images</span><span class="dtp-meta-val">${data.images} (img, picture, svg)</span></div>
+    <div class="dtp-meta-row"><span class="dtp-meta-key">Scripts</span><span class="dtp-meta-val">${data.scripts} external</span></div>
+    <div class="dtp-meta-row"><span class="dtp-meta-key">Stylesheets</span><span class="dtp-meta-val">${data.stylesheets} linked</span></div>
+  </div>`;
+
+  metaContent.innerHTML = html;
 }
 
 async function captureScreenshot() {
-  toolsGrid.style.display = 'none';
-  metaPanel.style.display = 'block';
-  metaTitle.textContent = 'Screenshot';
-  metaContent.innerHTML = '<div class="dtp-loading">Capturing...</div>';
-
-  try {
-    const dataUrl = await browser.runtime.sendMessage({ action: 'captureTab' });
-    if (!dataUrl) {
-      metaContent.innerHTML = '<div class="dtp-empty">No screenshot captured</div>';
-      return;
-    }
-
-    // Create download link
-    const a = document.createElement('a');
-    a.href = dataUrl as string;
-    a.download = `screenshot-${Date.now()}.png`;
-    a.click();
-
-    metaContent.innerHTML = `<div class="dtp-screenshot-preview">
-      <img src="${dataUrl}" alt="Screenshot" style="width:100%;border-radius:4px;margin:8px 0;">
-      <div class="dtp-empty">Screenshot saved to downloads</div>
-    </div>`;
-  } catch {
-    metaContent.innerHTML = '<div class="dtp-empty">Cannot capture this page (restricted page or permission denied)</div>';
+  showPanel('Screenshot', '<div class="dtp-loading">Capturing...</div>');
+  const result = await browser.runtime.sendMessage({ action: 'captureTab' }).catch((err: unknown) => ({ error: String((err as Error)?.message ?? err) }));
+  if (typeof result !== 'string') {
+    const reason = (result as { error?: string } | undefined)?.error ?? 'No screenshot captured';
+    showError(restrictionForError(new Error(reason), restrictionCtx).message, 'Screenshot');
+    return;
   }
-}
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const a = document.createElement('a');
+  a.href = result;
+  a.download = `screenshot-${Date.now()}.png`;
+  a.click();
+
+  metaContent.innerHTML = `<div class="dtp-screenshot-preview">
+    <img src="${result}" alt="Screenshot of the visible page" style="width:100%;border-radius:4px;margin:8px 0;">
+    <div class="dtp-empty">Screenshot saved to downloads</div>
+  </div>`;
 }
 
 init().catch(err => console.error('Popup init failed:', err));

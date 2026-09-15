@@ -45,10 +45,10 @@ function parseHex(hex: string): RGBA | null {
   let r: number, g: number, b: number, a = 255;
 
   if (h.length === 3 || h.length === 4) {
-    r = parseInt(h[0] + h[0], 16);
-    g = parseInt(h[1] + h[1], 16);
-    b = parseInt(h[2] + h[2], 16);
-    if (h.length === 4) a = parseInt(h[3] + h[3], 16);
+    r = parseInt(h.charAt(0).repeat(2), 16);
+    g = parseInt(h.charAt(1).repeat(2), 16);
+    b = parseInt(h.charAt(2).repeat(2), 16);
+    if (h.length === 4) a = parseInt(h.charAt(3).repeat(2), 16);
   } else if (h.length === 6 || h.length === 8) {
     r = parseInt(h.slice(0, 2), 16);
     g = parseInt(h.slice(2, 4), 16);
@@ -69,13 +69,13 @@ function parseRgb(str: string): RGBA | null {
   if (match[4]) {
     a = match[4].endsWith('%') ? parseFloat(match[4]) / 100 : parseFloat(match[4]);
   }
-  return { r: Math.round(+match[1]), g: Math.round(+match[2]), b: Math.round(+match[3]), a };
+  return { r: Math.round(Number(match[1])), g: Math.round(Number(match[2])), b: Math.round(Number(match[3])), a };
 }
 
 function parseHsl(str: string): RGBA | null {
   const match = str.match(/hsla?\(\s*([\d.]+)[\s,]+([\d.]+)%?[\s,]+([\d.]+)%?(?:[\s,/]+([\d.]+%?))?\s*\)/);
   if (!match) return null;
-  const h = +match[1], s = +match[2] / 100, l = +match[3] / 100;
+  const h = Number(match[1]), s = Number(match[2]) / 100, l = Number(match[3]) / 100;
   let a = 1;
   if (match[4]) {
     a = match[4].endsWith('%') ? parseFloat(match[4]) / 100 : parseFloat(match[4]);
@@ -143,11 +143,11 @@ export function rgbToHsl(c: RGBA): HSLA {
 
 /** Relative luminance per WCAG 2.1 */
 export function luminance(c: RGBA): number {
-  const srgb = [c.r, c.g, c.b].map(v => {
-    v = v / 255;
+  const linear = (channel: number) => {
+    const v = channel / 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  };
+  return 0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b);
 }
 
 /** WCAG contrast ratio between two colors (1-21) */

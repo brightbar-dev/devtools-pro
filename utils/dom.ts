@@ -59,3 +59,31 @@ export function categorizeMeta(name: string): MetaTag['type'] {
   if (['description', 'keywords', 'author', 'viewport', 'robots', 'theme-color', 'charset'].includes(name)) return 'meta';
   return 'other';
 }
+
+/**
+ * One step of an element's composed path, root first. `boundary` marks a step that sits
+ * inside a shadow root (hosted by the previous step) or inside a frame (the previous step
+ * is the frame element).
+ */
+export interface PathSegment {
+  label: string;
+  boundary?: 'shadow' | 'frame';
+}
+
+function pathSeparator(segment: PathSegment): string {
+  if (segment.boundary === 'shadow') return ' ⟫ #shadow-root ⟫ ';
+  if (segment.boundary === 'frame') return ' ⟫ frame ⟫ ';
+  return ' › ';
+}
+
+/** Format a composed path for display, keeping the last `max` steps. */
+export function formatPath(segments: PathSegment[], max = 5): string {
+  const truncated = segments.length > max;
+  const shown = truncated ? segments.slice(-max) : segments;
+  return shown
+    .map((segment, i) => {
+      if (i > 0) return pathSeparator(segment) + segment.label;
+      return truncated ? '…' + pathSeparator(segment) + segment.label : segment.label;
+    })
+    .join('');
+}
