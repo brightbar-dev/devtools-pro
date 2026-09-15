@@ -52,9 +52,17 @@ describe('tool actions', () => {
   });
 });
 
+describe('tool hints', () => {
+  it('tells the user what a click does where it is not "pin"', () => {
+    expect(getTool('rulers').hint).toMatch(/anchor/);
+    expect(getTool('grid-overlay').hint).toMatch(/keep/);
+    expect(getTool('css-inspect').hint).toBeUndefined();
+  });
+});
+
 describe('tool lookup', () => {
   it('finds a tool by id', () => {
-    expect(getTool('rulers').name).toBe('Rulers');
+    expect(getTool('rulers').name).toBe('Measure');
     expect(findTool('assets')?.kind).toBe('page');
   });
 

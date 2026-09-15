@@ -12,6 +12,7 @@ import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont } from 
 import { parsePx, type BoxModel, type BoxSides } from './spacing';
 import { elementSelector, formatDimensions, textPreview, type PathSegment } from './dom';
 import { getHoverTool, UnknownToolError } from './tools';
+import { distanceGuides, formatLength } from './measure';
 import type { Rect, Size } from './geometry';
 
 /** What the builders may read about an element. Every accessor is lazy, so a tool reads only what it shows. */
@@ -72,22 +73,24 @@ export interface PanelModel {
 export interface BuildContext {
   viewport: Size;
   path: PathSegment[];
+  /** The Measure tool's anchored element, when one is set. */
+  anchor?: Rect;
 }
 
 /** Build the panel for a hover tool. Throws `UnknownToolError` for ids that are not hover tools. */
 export function buildPanelModel(toolId: string, target: InspectTarget, ctx: BuildContext): PanelModel {
   const tool = getHoverTool(toolId);
-  return { toolId: tool.id, title: tool.name, path: ctx.path, blocks: blocksFor(tool.id, target, ctx.viewport) };
+  return { toolId: tool.id, title: tool.name, path: ctx.path, blocks: blocksFor(tool.id, target, ctx) };
 }
 
-function blocksFor(toolId: string, t: InspectTarget, viewport: Size): PanelBlock[] {
+function blocksFor(toolId: string, t: InspectTarget, ctx: BuildContext): PanelBlock[] {
   switch (toolId) {
     case 'css-inspect': return cssBlocks(t);
     case 'color-picker': return colorBlocks(t);
     case 'font-detect': return fontBlocks(t);
     case 'spacing': return spacingBlocks(t);
     case 'element-info': return elementBlocks(t);
-    case 'rulers': return rulerBlocks(t, viewport);
+    case 'rulers': return rulerBlocks(t, ctx.viewport, ctx.anchor);
     case 'grid-overlay': return gridBlocks(t);
     default: throw new UnknownToolError(toolId, 'has no panel builder');
   }
@@ -226,7 +229,7 @@ function elementBlocks(t: InspectTarget): PanelBlock[] {
 
 const px = (n: number) => `${Math.round(n)}px`;
 
-function rulerBlocks(t: InspectTarget, viewport: Size): PanelBlock[] {
+function rulerBlocks(t: InspectTarget, viewport: Size, anchor?: Rect): PanelBlock[] {
   const r = t.rect;
   const blocks: PanelBlock[] = [{
     kind: 'rows',
@@ -262,6 +265,17 @@ function rulerBlocks(t: InspectTarget, viewport: Size): PanelBlock[] {
     if (prev) rows.push(row('Above', `${px(r.top - (prev.rect.top + prev.rect.height))} gap`));
     if (next) rows.push(row('Below', `${px(next.rect.top - (r.top + r.height))} gap`));
     blocks.push({ kind: 'rows', title: 'Sibling Gaps', rows });
+  }
+
+  if (anchor) {
+    const guides = distanceGuides(anchor, r);
+    blocks.unshift({
+      kind: 'rows',
+      title: 'To anchor',
+      rows: guides.length > 0
+        ? guides.map(g => row(g.axis === 'x' ? 'Horizontal' : 'Vertical', formatLength(g.length)))
+        : [row('Distance', 'Same box as the anchor')],
+    });
   }
   return blocks;
 }

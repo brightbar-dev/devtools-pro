@@ -13,6 +13,9 @@ import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/util
 import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
 import { addRecentColor, buildPalette, type ColorUse } from '@/utils/palette';
 import { paletteModel, pickedColorModel } from '@/utils/color-panels';
+import { boxModelOf } from '@/utils/inspect';
+import { distanceGuides, formatLength, isDrag, rulerRect } from '@/utils/measure';
+import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
 import {
   FRAME_PROTOCOL, parseFrameMessage,
   type BroadcastRequest, type CollectKind, type FrameMessage, type InspectorMessage, type InspectorReply,
@@ -27,6 +30,7 @@ interface Ui {
   panel: HTMLDivElement;
   bar: HTMLDivElement;
   highlights: HTMLDivElement;
+  drawings: HTMLDivElement;
 }
 
 type Shown =
@@ -72,6 +76,13 @@ export default defineContentScript({
     let renderedModel: PanelModel | null = null;
     let ui: Ui | null = null;
     let hint = '';
+    // Measure and Grid Overlay state (render root only)
+    let anchorEl: Element | null = null;
+    let altHeld = false;
+    let dragStart: { left: number; top: number } | null = null;
+    let ruler: Rect | null = null;
+    let suppressClick = false;
+    const pinnedContainers = new Set<Element>();
     let hintTimer: number | undefined;
     const frameCache = new WeakMap<object, FrameElement>();
 
@@ -239,9 +250,11 @@ export default defineContentScript({
 
     function modelFor(el: Element, toolId: string): PanelModel {
       try {
+        const anchor = toolId === 'rulers' && anchorEl?.isConnected && anchorEl !== el ? toRect(anchorEl.getBoundingClientRect()) : undefined;
         return buildPanelModel(toolId, targetOf(el), {
           viewport: { width: window.innerWidth, height: window.innerHeight },
           path: pathOf(el),
+          anchor,
         });
       } catch (err) {
         return { toolId, title: 'DevTools Pro', path: pathOf(el), blocks: [{ kind: 'note', text: `Could not inspect this element: ${(err as Error).message}` }] };
@@ -252,6 +265,13 @@ export default defineContentScript({
 
     function onPointerMove(e: MouseEvent) {
       pointer = { x: e.clientX, y: e.clientY };
+      if (altHeld !== e.altKey) {
+        altHeld = e.altKey;
+        hoverFrame.schedule();
+      }
+      if (dragStart && isDrag(dragStart, { left: e.clientX, top: e.clientY })) {
+        ruler = rulerRect(dragStart, { left: e.clientX, top: e.clientY });
+      }
       if (!pinned) hoverFrame.schedule();
     }
 
@@ -319,9 +339,12 @@ export default defineContentScript({
       const highlights = document.createElement('div');
       highlights.className = 'highlights';
       highlights.setAttribute('aria-hidden', 'true');
-      root.append(highlights, overlay, panel, bar);
+      const drawings = document.createElement('div');
+      drawings.className = 'drawings';
+      drawings.setAttribute('aria-hidden', 'true');
+      root.append(drawings, highlights, overlay, panel, bar);
       root.addEventListener('click', onUiClick);
-      return { host, root, overlay, panel, bar, highlights };
+      return { host, root, overlay, panel, bar, highlights, drawings };
     }
 
     function attachUi() {
@@ -373,7 +396,11 @@ export default defineContentScript({
     }
 
     function draw() {
-      if (!ui || !shown) return;
+      if (!ui) return;
+      if (!shown) {
+        drawOverlays(null);
+        return;
+      }
       let rect: Rect;
       if (shown.source === 'static') {
         // Not about an element: sit above the tool bar.
@@ -413,6 +440,201 @@ export default defineContentScript({
       };
       const pos = placePanel(rect, { width: ui.panel.offsetWidth, height: ui.panel.offsetHeight }, viewport);
       ui.panel.style.transform = `translate(${pos.left}px, ${pos.top}px)`;
+      drawOverlays(shown.source === 'self' ? shown.el : null);
+    }
+
+    // ── Drawn overlays: spacing regions, grid and flex layout, measurements ─
+
+    interface Drawing {
+      box(cls: string, r: Rect): void;
+      label(text: string, left: number, top: number, cls?: string): void;
+    }
+
+    function drawOverlays(el: Element | null) {
+      if (!ui) return;
+      const frag = document.createDocumentFragment();
+      const drawing: Drawing = {
+        box(cls, r) {
+          if (r.width <= 0 && r.height <= 0) return;
+          const d = document.createElement('div');
+          d.className = `dw ${cls}`;
+          Object.assign(d.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${Math.max(0, r.width)}px`, height: `${Math.max(0, r.height)}px` });
+          frag.append(d);
+        },
+        label(text, left, top, cls = '') {
+          const s = document.createElement('span');
+          s.className = `dw-label ${cls}`;
+          s.textContent = text;
+          Object.assign(s.style, { left: `${Math.round(left)}px`, top: `${Math.round(Math.max(0, top))}px` });
+          frag.append(s);
+        },
+      };
+      if (activeTool === 'spacing' && el) drawSpacing(el, drawing);
+      if (activeTool === 'grid-overlay') {
+        const containers = new Set([...pinnedContainers].filter(c => c.isConnected));
+        const hoveredContainer = el ? layoutContainerFor(el) : null;
+        if (hoveredContainer) containers.add(hoveredContainer);
+        for (const container of containers) drawLayout(container, drawing, pinnedContainers.has(container));
+      }
+      if (activeTool === 'rulers') drawMeasure(el, drawing);
+      ui.drawings.replaceChildren(frag);
+    }
+
+    function drawSpacing(el: Element, d: Drawing) {
+      const t = targetOf(el);
+      const r = t.rect;
+      const box = boxModelOf(t);
+      const regions = boxRegions(r, box);
+      regions.margin.forEach(band => d.box('dw-margin', band));
+      regions.padding.forEach(band => d.box('dw-padding', band));
+      d.box('dw-content', regions.content);
+      const midX = r.left + r.width / 2;
+      const midY = r.top + r.height / 2;
+      const { margin: m, padding: p, border: b } = box;
+      const sideLabel = (value: number, left: number, top: number, cls: string) => {
+        if (value > 0) d.label(formatLength(value), left, top, `center dw-small ${cls}`);
+      };
+      sideLabel(m.top, midX, r.top - m.top / 2, 'dw-margin-label');
+      sideLabel(m.bottom, midX, r.top + r.height + m.bottom / 2, 'dw-margin-label');
+      sideLabel(m.left, r.left - m.left / 2, midY, 'dw-margin-label');
+      sideLabel(m.right, r.left + r.width + m.right / 2, midY, 'dw-margin-label');
+      sideLabel(p.top, midX, r.top + b.top + p.top / 2, 'dw-padding-label');
+      sideLabel(p.bottom, midX, r.top + r.height - b.bottom - p.bottom / 2, 'dw-padding-label');
+      sideLabel(p.left, r.left + b.left + p.left / 2, midY, 'dw-padding-label');
+      sideLabel(p.right, r.left + r.width - b.right - p.right / 2, midY, 'dw-padding-label');
+      const c = regions.content;
+      if (c.width >= 48 && c.height >= 16) d.label(`${Math.round(c.width)} × ${Math.round(c.height)}`, c.left + c.width / 2, c.top + c.height / 2, 'center dw-small dw-content-label');
+    }
+
+    /** The grid or flex container an element is, or belongs to. */
+    function layoutContainerFor(el: Element): Element | null {
+      if (/grid|flex/.test(window.getComputedStyle(el).display)) return el;
+      const parent = composedParent(el);
+      return parent && /grid|flex/.test(window.getComputedStyle(parent).display) ? parent : null;
+    }
+
+    function drawLayout(container: Element, d: Drawing, isPinned: boolean) {
+      const cs = window.getComputedStyle(container);
+      const t = targetOf(container);
+      const rect = t.rect;
+      const content = boxRegions(rect, boxModelOf(t)).content;
+      d.box(isPinned ? 'dw-container dw-pinned' : 'dw-container', rect);
+      if (cs.display.includes('grid')) {
+        const grid = gridOverlay({
+          content,
+          columns: parseTrackList(cs.gridTemplateColumns),
+          rows: parseTrackList(cs.gridTemplateRows),
+          columnGap: parsePx(cs.columnGap),
+          rowGap: parsePx(cs.rowGap),
+          justifyContent: cs.justifyContent,
+          alignContent: cs.alignContent,
+          areas: cs.gridTemplateAreas,
+        });
+        grid.columns.forEach((col, i) => {
+          d.box('dw-track', col);
+          d.label(String(i + 1), col.left + col.width / 2, col.top + 9, 'center dw-num');
+        });
+        grid.rows.forEach((row, i) => {
+          d.box('dw-track dw-row', row);
+          if (grid.columns.length > 0) d.label(String(i + 1), row.left + 9, row.top + row.height / 2, 'center dw-num');
+        });
+        [...grid.columnGaps, ...grid.rowGaps].forEach(gap => d.box('dw-gap', gap));
+        grid.areas.forEach(area => {
+          d.box('dw-area', area);
+          d.label(area.name, area.left + area.width / 2, area.top + area.height / 2, 'center dw-area-name');
+        });
+        d.label(`grid · ${grid.columns.length} × ${grid.rows.length}${isPinned ? ' · kept' : ''}`, rect.left, rect.top - 20, 'dw-title');
+      } else {
+        const items = Array.from(container.children)
+          .filter(child => {
+            const ccs = window.getComputedStyle(child);
+            return ccs.display !== 'none' && ccs.position !== 'absolute' && ccs.position !== 'fixed';
+          })
+          .map(child => toRect(child.getBoundingClientRect()));
+        items.forEach(item => d.box('dw-item', item));
+        flexGaps(items, cs.flexDirection).forEach(gap => d.box('dw-gap', gap));
+        const arrow: Record<string, string> = { row: '→', 'row-reverse': '←', column: '↓', 'column-reverse': '↑' };
+        d.label(`flex · ${cs.flexDirection} ${arrow[cs.flexDirection] ?? ''}${cs.flexWrap === 'nowrap' ? '' : ' · wrap'}${isPinned ? ' · kept' : ''}`, rect.left, rect.top - 20, 'dw-title');
+      }
+    }
+
+    function drawMeasure(el: Element | null, d: Drawing) {
+      const sizeLabel = (r: Rect, cls: string) =>
+        d.label(`${Number(r.width.toFixed(1))} × ${Number(r.height.toFixed(1))}`, r.left, r.top >= 22 ? r.top - 20 : r.top + r.height + 4, `dw-size ${cls}`);
+      const anchor = anchorEl?.isConnected ? toRect(anchorEl.getBoundingClientRect()) : null;
+      if (anchor) {
+        d.box('dw-anchor', anchor);
+        sizeLabel(anchor, 'dw-anchor-label');
+      }
+      if (el && el !== anchorEl) {
+        const r = toRect(el.getBoundingClientRect());
+        sizeLabel(r, '');
+        if (anchor && altHeld) {
+          for (const g of distanceGuides(anchor, r)) {
+            d.box(g.axis === 'x' ? 'dw-guide' : 'dw-guide', g.axis === 'x'
+              ? { left: g.x1, top: g.y1, width: g.length, height: 1 }
+              : { left: g.x1, top: g.y1, width: 1, height: g.length });
+            d.label(formatLength(g.length), (g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2, 'center dw-guide-label');
+          }
+        }
+      }
+      if (ruler) {
+        d.box('dw-ruler', ruler);
+        d.label(`${Math.round(ruler.width)} × ${Math.round(ruler.height)}`, ruler.left + ruler.width / 2, ruler.top + ruler.height / 2, 'center dw-ruler-label');
+      }
+    }
+
+    function currentElement(): Element | null {
+      return shown?.source === 'self' ? shown.el : null;
+    }
+
+    function toggleAnchor() {
+      const el = currentElement();
+      ruler = null;
+      anchorEl = el && el !== anchorEl ? el : null;
+      flashHint(anchorEl ? 'Anchored · hold Alt over another element' : 'Anchor cleared');
+      hovered = null; // rebuild the panel with or without "To anchor"
+      hoverFrame.schedule();
+      draw();
+    }
+
+    function togglePinnedContainer() {
+      const el = currentElement();
+      const container = el ? layoutContainerFor(el) : null;
+      if (!container) {
+        flashHint('Not a grid or flex container');
+        return;
+      }
+      if (pinnedContainers.has(container)) pinnedContainers.delete(container);
+      else pinnedContainers.add(container);
+      flashHint(`${pinnedContainers.size} overlay${pinnedContainers.size === 1 ? '' : 's'} kept`);
+      draw();
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      if (activeTool !== 'rulers' || !renderHere || e.button !== 0) return;
+      if (ui && e.composedPath().includes(ui.host)) return;
+      e.preventDefault(); // no text selection while measuring
+      dragStart = { left: e.clientX, top: e.clientY };
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      if (!dragStart) return;
+      const end = { left: e.clientX, top: e.clientY };
+      if (isDrag(dragStart, end)) {
+        ruler = rulerRect(dragStart, end);
+        suppressClick = true;
+        flashHint(`${Math.round(ruler.width)} × ${Math.round(ruler.height)} · click to clear`);
+        draw();
+      }
+      dragStart = null;
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Alt' && altHeld) {
+        altHeld = false;
+        draw();
+      }
     }
 
     function hideHighlight() {
@@ -425,7 +647,7 @@ export default defineContentScript({
     function renderBar() {
       if (!ui) return;
       const tool = activeTool ? getHoverTool(activeTool) : null;
-      const status = hint || (pinned ? 'Pinned · click the page to release' : 'Click to pin · Esc to exit');
+      const status = hint || (pinned ? 'Pinned · click the page to release' : `${tool?.hint ?? 'Click to pin'} · Esc to exit`);
       ui.bar.innerHTML = `<span class="chip" title="Active tool"><span class="dot" aria-hidden="true"></span>${escapeHtml(tool?.name ?? '')}</span>`
         + HOVER_TOOLS.map(t => `<button type="button" class="tb-btn${t.id === activeTool ? ' active' : ''}" data-tool="${t.id}"`
           + ` aria-pressed="${t.id === activeTool}" title="${escapeHtml(t.name)}">${escapeHtml(t.shortName)}</button>`).join('')
@@ -511,6 +733,17 @@ export default defineContentScript({
       if (ui && e.composedPath().includes(ui.host)) return; // our own toolbar and panel
       e.preventDefault();
       e.stopPropagation();
+      if (suppressClick) {
+        suppressClick = false; // the click that ends a ruler drag
+        return;
+      }
+      if (activeTool === 'rulers' || activeTool === 'grid-overlay') {
+        if (renderHere) {
+          if (activeTool === 'rulers') toggleAnchor();
+          else togglePinnedContainer();
+        }
+        return;
+      }
       setPinned(!pinned);
       broadcast({ action: 'dtp:pin', pinned });
     }
@@ -524,6 +757,14 @@ export default defineContentScript({
         e.preventDefault();
         e.stopPropagation();
         exitEverywhere();
+        return;
+      }
+      if (e.key === 'Alt') {
+        if (activeTool === 'rulers') e.preventDefault(); // keep the browser menu from taking focus
+        if (!altHeld) {
+          altHeld = true;
+          draw();
+        }
         return;
       }
       if (!renderHere || !activeTool || e.ctrlKey || e.metaKey || e.altKey || isEditable(e.composedPath()[0])) return;
@@ -630,6 +871,16 @@ export default defineContentScript({
       }
     }
 
+    function resetDrawnState() {
+      anchorEl = null;
+      ruler = null;
+      dragStart = null;
+      suppressClick = false;
+      altHeld = false;
+      pinnedContainers.clear();
+      ui?.drawings.replaceChildren();
+    }
+
     function setCursor() {
       const style = document.documentElement.style;
       savedCursor ??= { value: style.getPropertyValue('cursor'), priority: style.getPropertyPriority('cursor') };
@@ -648,6 +899,7 @@ export default defineContentScript({
     function activate(toolId: string) {
       getHoverTool(toolId);
       const wasActive = activeTool !== null;
+      if (activeTool !== toolId) resetDrawnState();
       activeTool = toolId;
       hovered = null;
       if (!wasActive) {
@@ -656,6 +908,10 @@ export default defineContentScript({
         window.addEventListener('click', onClick, true);
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+        window.addEventListener('resize', onScroll, { passive: true });
+        window.addEventListener('mousedown', onMouseDown, true);
+        window.addEventListener('mouseup', onMouseUp, true);
+        window.addEventListener('keyup', onKeyUp, true);
         pinned = false;
         setCursor();
       }
@@ -680,6 +936,11 @@ export default defineContentScript({
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      resetDrawnState();
       restoreCursor();
       clearHighlights();
       detachUi();

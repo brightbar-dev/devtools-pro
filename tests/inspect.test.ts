@@ -196,6 +196,28 @@ describe('Rulers', () => {
   });
 });
 
+describe('Measure — anchor', () => {
+  it('adds distances to the anchor first when one is set', () => {
+    const model = buildPanelModel('rulers', fake({ rect: { left: 140, top: 10, width: 60, height: 60 } }), { ...ctx, anchor: { left: 0, top: 0, width: 100, height: 50 } });
+    expect(model.blocks[0]).toEqual({
+      kind: 'rows',
+      title: 'To anchor',
+      rows: [{ label: 'Horizontal', value: '40px' }, { label: 'Vertical', value: '10px' }, { label: 'Vertical', value: '20px' }],
+    });
+  });
+
+  it('says so when the hovered box is the anchor box', () => {
+    const rect = { left: 0, top: 0, width: 100, height: 50 };
+    const model = buildPanelModel('rulers', fake({ rect }), { ...ctx, anchor: rect });
+    expect(model.blocks[0]).toMatchObject({ title: 'To anchor', rows: [{ label: 'Distance', value: 'Same box as the anchor' }] });
+  });
+
+  it('has no anchor section without an anchor', () => {
+    const model = buildPanelModel('rulers', fake(), ctx);
+    expect(model.blocks.some(b => b.kind === 'rows' && b.title === 'To anchor')).toBe(false);
+  });
+});
+
 describe('Grid Overlay', () => {
   it('describes a grid container', () => {
     const model = buildPanelModel('grid-overlay', fake({

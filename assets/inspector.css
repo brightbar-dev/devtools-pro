@@ -282,6 +282,62 @@
 .panel::-webkit-scrollbar-track { background: transparent; }
 .panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
 
+/* Drawn overlays: spacing regions, grid and flex layout, measurements. */
+.drawings {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.dw {
+  position: fixed;
+  pointer-events: none;
+}
+
+.dw-margin { background: rgba(246, 178, 107, 0.45); }
+.dw-padding { background: rgba(147, 196, 125, 0.5); }
+.dw-content { background: rgba(111, 168, 220, 0.3); }
+
+.dw-container { outline: 2px dashed #a855f7; }
+.dw-container.dw-pinned { outline-style: solid; }
+.dw-track { border: 1px dashed rgba(168, 85, 247, 0.9); }
+.dw-gap {
+  background: repeating-linear-gradient(45deg, rgba(168, 85, 247, 0.4) 0 3px, rgba(168, 85, 247, 0.12) 3px 7px);
+}
+.dw-area {
+  border: 2px solid rgba(219, 39, 119, 0.85);
+  background: rgba(219, 39, 119, 0.08);
+}
+.dw-item { border: 1px dashed rgba(14, 165, 233, 0.95); background: rgba(14, 165, 233, 0.08); }
+
+.dw-anchor { outline: 2px dashed #f59e0b; outline-offset: 1px; }
+.dw-guide { background: #ef4444; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); }
+.dw-ruler { border: 1px solid #06b6d4; background: rgba(6, 182, 212, 0.14); }
+
+.dw-label {
+  position: fixed;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #111827;
+  color: #f8fafc;
+  font: 600 11px/16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.dw-label.center { transform: translate(-50%, -50%); }
+.dw-small { font-size: 10px; line-height: 14px; padding: 0 4px; }
+.dw-margin-label { background: #b45309; }
+.dw-padding-label { background: #15803d; }
+.dw-content-label { background: #1d4ed8; }
+.dw-num, .dw-title { background: #7e22ce; }
+.dw-area-name { background: #be185d; }
+.dw-size { background: #4338ca; }
+.dw-anchor-label { background: #b45309; }
+.dw-guide-label { background: #dc2626; }
+.dw-ruler-label { background: #0e7490; }
+
 /* Accessibility findings highlighted on the page. */
 .highlights {
   position: fixed;
