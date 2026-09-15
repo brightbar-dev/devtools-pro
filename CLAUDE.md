@@ -14,6 +14,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/inspect.ts** — Panel content for the hover tools, built from `InspectTarget` (a DOM-free view of an element) into a plain `PanelModel`.
 - **utils/panel-render.ts** — `PanelModel` → escaped HTML; style values are vetted and carried in `data-dtp-style`.
 - **utils/messages.ts** — Message shapes between popup, background and inspector; validation of frame postMessage traffic.
+- **utils/measure.ts** — Distance guides between an anchor and a target box (gaps and insets), drag ruler rect, length labels.
+- **utils/overlay-geometry.ts** — Drawn overlay geometry: margin/padding bands, grid tracks/gaps/named areas (with content distribution), flex gaps.
 - **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
 - **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
@@ -47,8 +49,10 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **Screenshot**: Uses `browser.tabs.captureVisibleTab()`, auto-downloads as PNG
 - **Accessibility**: The content script walks the document and every open or closed shadow root. It measures the contrast of each visible text element against its effective background (disabled controls and visually hidden text are skipped; up to 4000 elements), and collects alt text, link/button names, form labels, positive tabindex, heading order and landmarks. Every finding keeps its elements in a registry, so the popup's Highlight buttons outline them on the page (Esc or 8 s clears). Issues carry a WCAG 2.2 reference, marked best practice where it is guidance rather than a failure.
 - **CSS Variables**: Extracts all `--` properties from page stylesheets (same-origin), groups by scope, color swatches for color values, click to copy
-- **Rulers**: Hover-based measurement showing element dimensions, distance to parent, sibling gaps
-- **Grid Overlay**: Inspect grid/flexbox properties on containers; show child flex/grid item properties for non-container elements
+- **Measure** (tool id `rulers`): Hover draws the element's size on the page. Click anchors an element; holding Alt (Option) over another draws red distance guides with px labels (gaps between boxes, insets when one contains the other) and adds "To anchor" rows to the panel. Dragging on the page draws a ruler rectangle with its size; the next click clears it. Mousedown is swallowed while measuring so text is not selected.
+- **Grid Overlay**: Hovering a grid container (or a child of one) draws its column and row tracks with numbers, hatched gaps and named areas; a flex container gets item outlines, hatched gaps and its direction. Click keeps an overlay; several can be kept at once. The panel still lists the layout properties.
+- **Spacing**: Hover tints margin (orange), padding (green) and content (blue) on the page, DevTools-style, with values on each side and the content size; the panel keeps the box-model diagram.
+- **Drawings** are rebuilt on hover change, scroll and resize in a `drawings` layer of the shadow root; they are drawn for elements of the top document (frame hovers get the outline and panel only).
 - **Page Assets**: Lists images, scripts, stylesheets, fonts used on the page
 
 ## Monetization

@@ -25,6 +25,8 @@ export interface Tool {
   description: string;
   kind: ToolKind;
   actions?: ToolAction[];
+  /** What clicking does while this hover tool is active, shown in the tool bar. */
+  hint?: string;
 }
 
 export const TOOLS: Tool[] = [
@@ -38,14 +40,22 @@ export const TOOLS: Tool[] = [
     ],
   },
   { id: 'font-detect', name: 'Font Detector', shortName: 'Font', icon: 'Aa', description: 'Detect fonts, sizes, weights on any element', kind: 'hover' },
-  { id: 'spacing', name: 'Spacing', shortName: 'Spacing', icon: '⬜', description: 'Visualize margins, padding, and borders', kind: 'hover' },
+  { id: 'spacing', name: 'Spacing', shortName: 'Spacing', icon: '⬜', description: 'Margins and padding drawn on the page, with values', kind: 'hover' },
   { id: 'element-info', name: 'Element Info', shortName: 'Element', icon: '<>', description: 'Tag, classes, dimensions, position', kind: 'hover' },
   { id: 'meta-tags', name: 'Page Meta', shortName: 'Meta', icon: 'ℹ', description: 'View meta tags, Open Graph, viewport', kind: 'page' },
   { id: 'screenshot', name: 'Screenshot', shortName: 'Shot', icon: '📸', description: 'Capture the visible part of the page as PNG', kind: 'capture' },
   { id: 'accessibility', name: 'Accessibility', shortName: 'A11y', icon: 'A11y', description: 'Audit contrast, alt text, labels, headings and landmarks, with WCAG references', kind: 'page' },
   { id: 'css-vars', name: 'CSS Variables', shortName: 'Vars', icon: '--', description: 'List all CSS custom properties', kind: 'page' },
-  { id: 'rulers', name: 'Rulers', shortName: 'Rulers', icon: '📏', description: 'Measure distances between elements', kind: 'hover' },
-  { id: 'grid-overlay', name: 'Grid Overlay', shortName: 'Grid', icon: '▦', description: 'Visualize grid and flexbox layouts', kind: 'hover' },
+  {
+    id: 'rulers', name: 'Measure', shortName: 'Measure', icon: '📏', kind: 'hover',
+    description: 'Sizes on hover; click to anchor, hold Alt for distances, drag for a ruler',
+    hint: 'Click to anchor · Alt for distances · drag to measure',
+  },
+  {
+    id: 'grid-overlay', name: 'Grid Overlay', shortName: 'Grid', icon: '▦', kind: 'hover',
+    description: 'Draw grid tracks, gaps and areas, and flex items, on the page',
+    hint: 'Click a container to keep its overlay',
+  },
   { id: 'assets', name: 'Page Assets', shortName: 'Assets', icon: '📦', description: 'List images, fonts, scripts, stylesheets', kind: 'page' },
 ];
 
