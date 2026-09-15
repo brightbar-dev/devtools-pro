@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to DevTools Pro</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="welcome">
+    <header class="hero">
+      <p class="eyebrow">DevTools Pro is installed</p>
+      <h1>Inspect any page without opening DevTools</h1>
+      <p class="lede">Thirteen tools, and every one is free: no trial, no account, no surprise paywall.</p>
+    </header>
+
+    <section class="card">
+      <h2>Start in two steps</h2>
+      <ol class="steps">
+        <li><strong>Pin it.</strong> Open the extensions menu (the puzzle piece) in the browser toolbar and click the pin next to DevTools Pro.</li>
+        <li><strong>Use it.</strong> On any page, click the DevTools Pro icon and pick a tool. Press <kbd>Esc</kbd> to stop.</li>
+      </ol>
+      <p class="note">DevTools Pro asked for no access to your sites when you installed it. It only touches the page you click it on, and only after you pick a tool. No tracking, no ads.</p>
+    </section>
+
+    <section class="card">
+      <h2>The tools</h2>
+      <ul class="tools" id="tools"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Keys while a tool is on</h2>
+      <dl class="keys">
+        <dt><kbd>Esc</kbd></dt><dd>Stop inspecting, in every frame</dd>
+        <dt>Click</dt><dd>Pin the panel (Measure: anchor · Grid: keep overlay · Live Edit: select)</dd>
+        <dt><kbd>S</kbd></dt><dd>Screenshot the hovered element</dd>
+        <dt><kbd>C</kbd> / <kbd>T</kbd></dt><dd>CSS Inspector: copy as CSS / as Tailwind classes</dd>
+        <dt><kbd>E</kbd> / <kbd>P</kbd></dt><dd>Color Picker: eyedropper / page palette</dd>
+        <dt><kbd>I</kbd></dt><dd>Font Detector: every font on the page</dd>
+        <dt><kbd>Alt</kbd> + hover · drag</dt><dd>Measure: distances to the anchor · a ruler</dd>
+        <dt><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></dt><dd>Live Edit: undo / redo (Ctrl on Windows and Linux)</dd>
+      </dl>
+    </section>
+
+    <footer class="footer">
+      Built by <a href="https://brightbar.dev" target="_blank" rel="noopener">Brightbar</a> ·
+      <a href="https://github.com/brightbar-dev/devtools-pro/issues" target="_blank" rel="noopener">Report a problem</a>
+    </footer>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

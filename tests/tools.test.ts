@@ -43,6 +43,10 @@ describe('tool actions', () => {
     expect(getTool('color-picker').actions?.map(a => [a.id, a.key])).toEqual([['eyedropper', 'e'], ['palette', 'p']]);
   });
 
+  it('gives the Font Detector a page font inventory (I)', () => {
+    expect(getTool('font-detect').actions?.map(a => [a.id, a.key])).toEqual([['fonts', 'i']]);
+  });
+
   it('gives the CSS Inspector Copy CSS (C) and Copy Tailwind (T)', () => {
     expect(getTool('css-inspect').actions?.map(a => [a.id, a.key])).toEqual([['copy-css', 'c'], ['copy-tailwind', 't']]);
   });

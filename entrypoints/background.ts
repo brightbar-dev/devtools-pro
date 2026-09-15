@@ -9,6 +9,8 @@ export default defineBackground(() => {
         compactMode: false,
         activeTool: null,
       });
+      // First run: what each tool does, the keys, and that every tool is free.
+      await browser.tabs.create({ url: browser.runtime.getURL('/welcome.html') });
     }
   });
 

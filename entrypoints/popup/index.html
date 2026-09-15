@@ -10,13 +10,15 @@
   <div class="dtp-popup">
     <header class="dtp-header">
       <h1>DevTools Pro</h1>
+      <span class="dtp-header-note">Every tool free</span>
     </header>
 
     <div class="dtp-page-notice" id="page-notice" role="status" hidden></div>
 
-    <section class="dtp-tools" id="tools-grid">
+    <section class="dtp-tools" id="tools-grid" aria-label="Tools">
       <!-- Tool buttons rendered by main.ts -->
     </section>
+    <p class="dtp-tool-description" id="tool-description" aria-hidden="true"></p>
 
     <section class="dtp-meta-panel" id="meta-panel" style="display:none">
       <div class="dtp-meta-header">
@@ -36,7 +38,7 @@
     </section>
 
     <footer class="dtp-footer">
-      <span class="dtp-version">v0.2.0</span>
+      <span class="dtp-version" id="version"></span>
       <a href="#" id="options-link" class="dtp-options-link">Settings</a>
     </footer>
   </div>

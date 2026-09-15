@@ -39,6 +39,22 @@
   will-change: transform;
 }
 
+/* Compact mode (Settings): smaller type, no path, no rule sources. */
+.panel.compact {
+  max-width: 290px;
+  min-width: 180px;
+  padding: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.panel.compact .panel-path,
+.panel.compact .prop-detail { display: none; }
+.panel.compact .panel-head { padding-bottom: 3px; }
+.panel.compact .cat-name { padding: 2px 0 1px; }
+.panel.compact .prop { padding: 1px 2px; gap: 8px; }
+.panel.compact .font-preview { max-height: 48px; padding: 4px; }
+
 .panel.pinned {
   pointer-events: auto;
   border-color: #818cf8;

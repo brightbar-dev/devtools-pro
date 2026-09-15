@@ -8,7 +8,7 @@
 import { parseColor, toHex, toRgb, toHsl, toOklch, wcagRating, type RGBA } from './colors';
 import { contrastLevels, effectiveBackground, textContrast, type BackgroundLayer } from './contrast';
 import { formatCssRule, nonDefaultDeclarations } from './css';
-import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont } from './fonts';
+import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont, parsePxOrNull } from './fonts';
 import { parsePx, type BoxModel, type BoxSides } from './spacing';
 import { elementSelector, formatDimensions, textPreview, type PathSegment } from './dom';
 import { getHoverTool, UnknownToolError } from './tools';
@@ -82,6 +82,10 @@ export interface BuildContext {
   anchor?: Rect;
   /** Winning authored declarations for the element, by property (CSS Inspector). */
   authored?: Record<string, AuthoredValue>;
+  /** Root font size in px, for rem values (Font Detector). */
+  rootFontSize?: number;
+  /** The family the browser renders for this element (Font Detector). */
+  renderedFont?: string;
 }
 
 export interface AuthoredValue {
@@ -100,7 +104,7 @@ function blocksFor(toolId: string, t: InspectTarget, ctx: BuildContext): PanelBl
   switch (toolId) {
     case 'css-inspect': return cssBlocks(t, ctx.authored);
     case 'color-picker': return colorBlocks(t);
-    case 'font-detect': return fontBlocks(t);
+    case 'font-detect': return fontBlocks(t, ctx);
     case 'spacing': return spacingBlocks(t);
     case 'element-info': return elementBlocks(t);
     case 'rulers': return rulerBlocks(t, ctx.viewport, ctx.anchor);
@@ -180,19 +184,35 @@ function colorBlocks(t: InspectTarget): PanelBlock[] {
   return blocks;
 }
 
-function fontBlocks(t: InspectTarget): PanelBlock[] {
+/** `2rem` for 32px at a 16px root; empty when either is not in px. */
+export function toRem(value: string, rootFontSize: number): string {
+  const px = parsePxOrNull(value);
+  return px === null || rootFontSize <= 0 ? '' : `${Number((px / rootFontSize).toFixed(3))}rem`;
+}
+
+function fontBlocks(t: InspectTarget, ctx: BuildContext): PanelBlock[] {
   const family = t.style('font-family');
   const stack = parseFontStack(family);
   const size = t.style('font-size');
   const weight = t.style('font-weight');
   const fontStyle = t.style('font-style');
   const letterSpacing = t.style('letter-spacing');
-  const rows: PanelRow[] = [
-    row('Font', stack[0] || family),
+  const lineHeight = t.style('line-height');
+  const rows: PanelRow[] = [row('Font', stack[0] || family, { copy: stack[0] || family })];
+  if (ctx.renderedFont !== undefined) {
+    rows.push(row('Rendered', ctx.renderedFont === stack[0]
+      ? `${ctx.renderedFont} (available)`
+      : `${ctx.renderedFont}${stack[0] ? ` · ${stack[0]} is not available` : ''}`));
+  }
+  rows.push(
     row('Stack', stack.map(f => (isGenericFont(f) ? `${f} (generic)` : f)).join(', ')),
-    row('Size', formatSizeLineHeight(size, t.style('line-height'))),
-    row('Weight', `${weight} (${weightName(weight)})`),
-  ];
+    row('Size', formatSizeLineHeight(size, lineHeight)),
+  );
+  if (ctx.rootFontSize) {
+    const rem = [toRem(size, ctx.rootFontSize), toRem(lineHeight, ctx.rootFontSize)].filter(Boolean).join('/');
+    if (rem) rows.push(row('In rem', rem));
+  }
+  rows.push(row('Weight', `${weight} (${weightName(weight)})`));
   if (fontStyle && fontStyle !== 'normal') rows.push(row('Style', fontStyle));
   if (letterSpacing && letterSpacing !== 'normal') rows.push(row('Letter Spacing', letterSpacing));
   return [
@@ -257,6 +277,17 @@ function elementBlocks(t: InspectTarget): PanelBlock[] {
 
 const px = (n: number) => `${Math.round(n)}px`;
 
+/** The gap from an element to a sibling, on whichever axis they are apart. */
+export function siblingGap(el: Rect, sibling: Rect): string {
+  const right = (b: Rect) => b.left + b.width;
+  const bottom = (b: Rect) => b.top + b.height;
+  if (sibling.left >= right(el)) return `${px(sibling.left - right(el))} to the right`;
+  if (right(sibling) <= el.left) return `${px(el.left - right(sibling))} to the left`;
+  if (sibling.top >= bottom(el)) return `${px(sibling.top - bottom(el))} below`;
+  if (bottom(sibling) <= el.top) return `${px(el.top - bottom(sibling))} above`;
+  return 'overlapping';
+}
+
 function rulerBlocks(t: InspectTarget, viewport: Size, anchor?: Rect): PanelBlock[] {
   const r = t.rect;
   const blocks: PanelBlock[] = [{
@@ -290,8 +321,8 @@ function rulerBlocks(t: InspectTarget, viewport: Size, anchor?: Rect): PanelBloc
   const next = t.next();
   if (prev || next) {
     const rows: PanelRow[] = [];
-    if (prev) rows.push(row('Above', `${px(r.top - (prev.rect.top + prev.rect.height))} gap`));
-    if (next) rows.push(row('Below', `${px(next.rect.top - (r.top + r.height))} gap`));
+    if (prev) rows.push(row('Previous sibling', siblingGap(r, prev.rect)));
+    if (next) rows.push(row('Next sibling', siblingGap(r, next.rect)));
     blocks.push({ kind: 'rows', title: 'Sibling Gaps', rows });
   }
 

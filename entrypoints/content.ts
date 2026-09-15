@@ -6,6 +6,8 @@ import { coalesceToFrames } from '@/utils/schedule';
 import { frameContentOffset, placePanel, sameRect, toRect, translateRect, type Rect } from '@/utils/geometry';
 import { elementSelector, escapeHtml, formatPath, textPreview, type PathSegment } from '@/utils/dom';
 import { parsePx } from '@/utils/spacing';
+import { parseFontStack, renderedFamily } from '@/utils/fonts';
+import { fontInventoryModel, summarizeFonts, type FontUse } from '@/utils/font-inventory';
 import { isGenericFont } from '@/utils/fonts';
 import type { CssVariable } from '@/utils/css-vars';
 import { parseColor, type RGBA } from '@/utils/colors';
@@ -84,6 +86,7 @@ export default defineContentScript({
     let renderedModel: PanelModel | null = null;
     let ui: Ui | null = null;
     let hint = '';
+    let compact = false;
     // Measure and Grid Overlay state (render root only)
     let anchorEl: Element | null = null;
     let altHeld = false;
@@ -269,6 +272,8 @@ export default defineContentScript({
           path: pathOf(el),
           anchor,
           authored: toolId === 'css-inspect' ? authoredFor(el) : undefined,
+          rootFontSize: parsePx(window.getComputedStyle(document.documentElement).fontSize) || 16,
+          renderedFont: toolId === 'font-detect' ? renderedFamily(parseFontStack(window.getComputedStyle(el).fontFamily), fontAvailable) : undefined,
         });
       } catch (err) {
         return { toolId, title: 'DevTools Pro', path: pathOf(el), blocks: [{ kind: 'note', text: `Could not inspect this element: ${(err as Error).message}` }] };
@@ -453,12 +458,14 @@ export default defineContentScript({
         renderedModel = shown.model;
       }
       ui.panel.classList.toggle('pinned', pinned);
+      ui.panel.classList.toggle('compact', compact);
       ui.panel.style.display = 'block';
       const viewport = {
         width: document.documentElement.clientWidth || window.innerWidth,
         height: document.documentElement.clientHeight || window.innerHeight,
       };
-      const pos = placePanel(rect, { width: ui.panel.offsetWidth, height: ui.panel.offsetHeight }, viewport);
+      const barRect = ui.bar.childElementCount > 0 ? toRect(ui.bar.getBoundingClientRect()) : null;
+      const pos = placePanel(rect, { width: ui.panel.offsetWidth, height: ui.panel.offsetHeight }, viewport, 8, 8, barRect ? [barRect] : []);
       ui.panel.style.transform = `translate(${pos.left}px, ${pos.top}px)`;
       drawOverlays(shown.source === 'self' ? shown.el : null);
     }
@@ -552,18 +559,18 @@ export default defineContentScript({
         });
         grid.columns.forEach((col, i) => {
           d.box('dw-track', col);
-          d.label(String(i + 1), col.left + col.width / 2, col.top + 9, 'center dw-num');
+          d.label(String(i + 1), col.left + col.width / 2, col.top - 10, 'center dw-num');
         });
         grid.rows.forEach((row, i) => {
           d.box('dw-track dw-row', row);
-          if (grid.columns.length > 0) d.label(String(i + 1), row.left + 9, row.top + row.height / 2, 'center dw-num');
+          if (grid.columns.length > 0) d.label(String(i + 1), row.left - 11, row.top + row.height / 2, 'center dw-num');
         });
         [...grid.columnGaps, ...grid.rowGaps].forEach(gap => d.box('dw-gap', gap));
         grid.areas.forEach(area => {
           d.box('dw-area', area);
           d.label(area.name, area.left + area.width / 2, area.top + area.height / 2, 'center dw-area-name');
         });
-        d.label(`grid · ${grid.columns.length} × ${grid.rows.length}${isPinned ? ' · kept' : ''}`, rect.left, rect.top - 20, 'dw-title');
+        d.label(`grid · ${grid.columns.length} × ${grid.rows.length}${isPinned ? ' · kept' : ''}`, rect.left, rect.top - 38, 'dw-title');
       } else {
         const items = Array.from(container.children)
           .filter(child => {
@@ -830,6 +837,7 @@ export default defineContentScript({
       else if (id === 'copy-css') await copyStyles('css');
       else if (id === 'copy-tailwind') await copyStyles('tailwind');
       else if (id === 'capture-element') await captureElementAction();
+      else if (id === 'fonts') showFontInventory();
       else flashHint(`Unknown action "${id}"`);
     }
 
@@ -1327,6 +1335,59 @@ export default defineContentScript({
       }
     }
 
+    const fontAvailability = new Map<string, boolean>();
+    let measureContext: OffscreenCanvasRenderingContext2D | null = null;
+
+    /**
+     * Whether a family can render: a loaded @font-face with that name, or text measured in it that
+     * differs from every generic fallback (so the browser did not silently substitute one).
+     */
+    function fontAvailable(family: string): boolean {
+      const cached = fontAvailability.get(family);
+      if (cached !== undefined) return cached;
+      let available = false;
+      try {
+        document.fonts.forEach(face => {
+          if (face.status === 'loaded' && face.family.replace(/^["']|["']$/g, '') === family) available = true;
+        });
+        measureContext ??= new OffscreenCanvas(1, 1).getContext('2d');
+        if (!available && measureContext) {
+          const sample = 'mmmmmmmmmmlli1WQ@#';
+          const quoted = `"${family.replace(/["\\]/g, '')}"`;
+          for (const fallback of ['monospace', 'serif', 'sans-serif']) {
+            measureContext.font = `72px ${fallback}`;
+            const base = measureContext.measureText(sample).width;
+            measureContext.font = `72px ${quoted}, ${fallback}`;
+            if (measureContext.measureText(sample).width !== base) {
+              available = true;
+              break;
+            }
+          }
+        }
+      } catch {
+        available = false;
+      }
+      fontAvailability.set(family, available);
+      return available;
+    }
+
+    /** Every family the page actually renders text in, with weights and sizes. */
+    function showFontInventory() {
+      const uses: FontUse[] = [];
+      let scanned = 0;
+      for (const root of allRoots()) {
+        for (const el of root.querySelectorAll('*')) {
+          if (++scanned > 20000) break;
+          if (!Array.from(el.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim())) continue;
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility !== 'visible') continue;
+          uses.push({ family: renderedFamily(parseFontStack(cs.fontFamily), fontAvailable), weight: cs.fontWeight, size: cs.fontSize, style: cs.fontStyle });
+        }
+      }
+      showStatic(fontInventoryModel(summarizeFonts(uses)));
+      flashHint('Fonts as rendered · click a family to copy · click the page to go back', 2500);
+    }
+
     /** Every distinct colour in computed styles, by role, with counts. */
     function showPalette() {
       const uses: ColorUse[] = [];
@@ -1421,8 +1482,31 @@ export default defineContentScript({
       if (renderHere) {
         attachUi();
         renderBar();
+        void loadCompact();
       }
       if (pointer) hoverFrame.schedule();
+    }
+
+    async function loadCompact() {
+      try {
+        const { compactMode } = await browser.storage.local.get('compactMode');
+        setCompact(Boolean(compactMode));
+      } catch {
+        setCompact(false);
+      }
+    }
+
+    function setCompact(value: boolean) {
+      if (compact === value) return;
+      compact = value;
+      if (ui) {
+        ui.panel.classList.toggle('compact', compact);
+        draw();
+      }
+    }
+
+    function onStorageChanged(changes: Record<string, { newValue?: unknown }>, area: string) {
+      if (area === 'local' && 'compactMode' in changes) setCompact(Boolean(changes.compactMode?.newValue));
     }
 
     function deactivate() {
@@ -1796,6 +1880,7 @@ export default defineContentScript({
     }
 
     browser.runtime.onMessage.addListener(onRuntimeMessage);
+    browser.storage.onChanged.addListener(onStorageChanged);
     window.addEventListener('message', onWindowMessage);
 
     g.__dtpInspector = {
@@ -1812,6 +1897,7 @@ export default defineContentScript({
         window.removeEventListener('message', onWindowMessage);
         try {
           browser.runtime.onMessage.removeListener(onRuntimeMessage);
+          browser.storage.onChanged.removeListener(onStorageChanged);
         } catch {
           // orphaned runtime
         }

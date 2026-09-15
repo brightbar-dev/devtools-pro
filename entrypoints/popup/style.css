@@ -42,6 +42,17 @@ body {
   border-bottom: 1px solid var(--dtp-border);
 }
 
+.dtp-header-note {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dtp-success-text, #047857);
+  background: color-mix(in srgb, var(--dtp-success) 14%, transparent);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.dtp-dark .dtp-header-note { color: #6ee7b7; }
+
 .dtp-header h1 {
   font-size: 15px;
   font-weight: 700;
@@ -102,8 +113,36 @@ body {
 }
 
 .dtp-tool-icon {
-  font-size: 18px;
-  line-height: 1;
+  line-height: 0;
+  color: var(--dtp-primary);
+}
+
+.dtp-tool-icon svg { display: block; }
+
+.dtp-tool-btn:focus-visible {
+  outline: 2px solid var(--dtp-primary);
+  outline-offset: 2px;
+}
+
+.dtp-tool-description {
+  min-height: 30px;
+  margin: 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--dtp-text-secondary);
+}
+
+.dtp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
 }
 
 .dtp-tool-name {
