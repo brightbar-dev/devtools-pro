@@ -1,41 +1,74 @@
-/* DevTools Pro — Inspector overlay and floating panel styles.
-   All classes prefixed with dtp- to avoid host page conflicts. */
+/* DevTools Pro — on-page inspector styles.
+   Loaded into the inspector's closed shadow root: nothing here reaches the host page, and
+   page CSS cannot reach the inspector. Class names need no prefix inside the shadow root. */
 
-#dtp-panel {
+*, *::before, *::after { box-sizing: border-box; }
+
+.overlay {
   position: fixed;
-  z-index: 2147483647;
+  top: 0;
+  left: 0;
+  display: none;
+  pointer-events: none;
+  border: 2px solid #4f46e5;
+  background: rgba(79, 70, 229, 0.12);
+  will-change: transform;
+}
+
+.panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  /* Click-through while following the pointer, so it never blocks the element under it;
+     interactive once pinned, so values can be clicked to copy. */
+  pointer-events: none;
+  width: max-content;
+  min-width: 220px;
   max-width: 360px;
-  max-height: 400px;
+  max-height: min(420px, calc(100vh - 16px));
   overflow-y: auto;
   background: #1e1e2e;
   color: #e2e8f0;
   border: 1px solid #3b3b5c;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-align: left;
   padding: 8px;
-  display: none;
-  pointer-events: auto;
+  will-change: transform;
 }
 
-#dtp-panel .dtp-section-header {
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #818cf8;
-  padding: 4px 0;
+.panel.pinned {
+  pointer-events: auto;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.45), 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.panel-head {
+  padding: 2px 0 6px;
   margin-bottom: 4px;
   border-bottom: 1px solid #3b3b5c;
 }
 
-#dtp-panel .dtp-category {
-  margin-bottom: 6px;
+.panel-title {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #a5b4fc;
 }
 
-#dtp-panel .dtp-cat-name {
+.panel-path {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  font-size: 11px;
+  color: #cbd5e1;
+  word-break: break-all;
+}
+
+.category { margin-bottom: 6px; }
+
+.cat-name {
   font-size: 10px;
   font-weight: 600;
   color: #94a3b8;
@@ -44,7 +77,7 @@
   padding: 4px 0 2px;
 }
 
-#dtp-panel .dtp-prop {
+.prop {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -52,34 +85,32 @@
   border-radius: 3px;
 }
 
-#dtp-panel .dtp-prop:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
+.prop:hover { background: rgba(255, 255, 255, 0.05); }
 
-#dtp-panel .dtp-prop-name {
-  color: #06b6d4;
+.prop-name {
+  color: #22d3ee;
   flex-shrink: 0;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 }
 
-#dtp-panel .dtp-prop-val {
+.prop-val {
   color: #e2e8f0;
   word-break: break-all;
   text-align: right;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 }
 
-#dtp-panel .dtp-swatch {
+.swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   margin-right: 4px;
   vertical-align: middle;
 }
 
-#dtp-panel .dtp-swatch-lg {
+.swatch-lg {
   display: block;
   width: 40px;
   height: 40px;
@@ -88,7 +119,7 @@
   flex-shrink: 0;
 }
 
-#dtp-panel .dtp-color-row {
+.color-row {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -96,59 +127,52 @@
   border-bottom: 1px solid #3b3b5c;
 }
 
-#dtp-panel .dtp-color-label {
+.color-label {
   font-weight: 600;
   font-size: 11px;
   color: #94a3b8;
   margin-bottom: 2px;
 }
 
-#dtp-panel .dtp-color-value {
-  font-family: 'SF Mono', monospace;
+.color-value {
+  font-family: 'SF Mono', ui-monospace, monospace;
   font-size: 11px;
-  cursor: pointer;
   padding: 1px 4px;
   border-radius: 3px;
 }
 
-#dtp-panel .dtp-color-value:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-#dtp-panel .dtp-contrast {
+.contrast {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 6px 4px;
-  font-size: 12px;
 }
 
-#dtp-panel .dtp-badge {
+.badge {
   font-size: 10px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 3px;
 }
 
-#dtp-panel .dtp-aaa { background: #065f46; color: #6ee7b7; }
-#dtp-panel .dtp-aa { background: #1e3a5f; color: #7dd3fc; }
-#dtp-panel .dtp-fail { background: #7f1d1d; color: #fca5a5; }
+.aaa { background: #065f46; color: #6ee7b7; }
+.aa { background: #1e3a5f; color: #7dd3fc; }
+.fail { background: #7f1d1d; color: #fca5a5; }
 
-/* Font preview */
-#dtp-panel .dtp-font-preview {
+.font-preview {
   padding: 8px;
   margin: 4px 0;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
-  font-size: 18px;
+  max-height: 96px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* Box model visualization */
-#dtp-panel .dtp-box-model {
-  padding: 4px;
-}
+.box-model { padding: 4px; }
 
-#dtp-panel .dtp-box-layer {
+.box-layer {
   padding: 8px;
   border: 2px dashed;
   border-radius: 4px;
@@ -156,17 +180,17 @@
   text-align: center;
 }
 
-#dtp-panel .dtp-margin-box { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
-#dtp-panel .dtp-border-box { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
-#dtp-panel .dtp-padding-box { border-color: #10b981; background: rgba(16, 185, 129, 0.05); }
-#dtp-panel .dtp-content-box {
+.margin-box { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+.border-box { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
+.padding-box { border-color: #10b981; background: rgba(16, 185, 129, 0.05); }
+.content-box {
   border: 2px solid #818cf8;
   background: rgba(129, 140, 248, 0.1);
   padding: 8px;
   font-weight: 600;
 }
 
-#dtp-panel .dtp-box-label {
+.box-label {
   position: absolute;
   top: -1px;
   left: 4px;
@@ -176,80 +200,97 @@
   letter-spacing: 0.5px;
 }
 
-#dtp-panel .dtp-margin-box .dtp-box-label { color: #f59e0b; }
-#dtp-panel .dtp-border-box .dtp-box-label { color: #3b82f6; }
-#dtp-panel .dtp-padding-box .dtp-box-label { color: #10b981; }
+.margin-box > .box-label { color: #fbbf24; }
+.border-box > .box-label { color: #60a5fa; }
+.padding-box > .box-label { color: #34d399; }
 
-#dtp-panel .dtp-box-values {
+.box-values {
   display: flex;
   justify-content: space-between;
   font-size: 10px;
   padding: 0 4px 4px;
 }
 
-#dtp-panel .dtp-copyable { cursor: pointer; }
-#dtp-panel .dtp-copyable:hover { background: rgba(79, 70, 229, 0.15); }
-#dtp-panel .dtp-copied { background: rgba(16, 185, 129, 0.2) !important; }
-
-/* Panel scrollbar */
-#dtp-panel::-webkit-scrollbar { width: 4px; }
-#dtp-panel::-webkit-scrollbar-track { background: transparent; }
-#dtp-panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
-
-/* Overlay toolbar for tool switching */
-#dtp-toolbar {
-  position: fixed;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  z-index: 2147483647;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: #1e1e2e;
-  border: 1px solid #3b3b5c;
-  border-radius: 10px;
-  padding: 6px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+.note {
+  color: #cbd5e1;
+  font-style: italic;
+  padding: 4px;
 }
 
-.dtp-tb-btn {
-  width: 32px;
-  height: 32px;
+.copyable { cursor: pointer; }
+.copyable:hover { background: rgba(99, 102, 241, 0.22); }
+.copied { background: rgba(16, 185, 129, 0.3) !important; }
+.copy-failed { background: rgba(239, 68, 68, 0.3) !important; }
+
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+
+/* Toolbar: the active tool chip, tool switcher, status, and close. */
+.bar {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 2px;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  pointer-events: auto;
+  background: #1e1e2e;
+  color: #e2e8f0;
+  border: 1px solid #3b3b5c;
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  font: 12px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  margin-right: 2px;
+  border-radius: 6px;
+  background: #312e81;
+  color: #e0e7ff;
+  font-weight: 600;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+.tb-btn, .tb-close {
+  appearance: none;
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #94a3b8;
-  font-size: 13px;
+  color: #cbd5e1;
+  font: inherit;
+  padding: 6px 8px;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
-  padding: 0;
-  line-height: 1;
 }
 
-.dtp-tb-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
-}
+.tb-btn:hover, .tb-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.tb-btn.active { background: #4f46e5; color: #fff; }
+.tb-btn:focus-visible, .tb-close:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 1px; }
 
-.dtp-tb-active {
-  background: #4f46e5 !important;
-  color: #fff !important;
-}
-
-.dtp-tb-close {
-  margin-top: 4px;
-  border-top: 1px solid #3b3b5c;
-  padding-top: 4px;
-  color: #f87171;
+.hint {
+  color: #94a3b8;
   font-size: 11px;
+  padding: 0 8px;
 }
 
-.dtp-tb-close:hover {
-  background: rgba(248, 113, 113, 0.15);
-  color: #fca5a5;
+.tb-close { color: #fca5a5; }
+.tb-close:hover { background: rgba(248, 113, 113, 0.18); color: #fecaca; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
 }

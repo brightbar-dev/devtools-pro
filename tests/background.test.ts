@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 
 // The formerly-Pro tools (screenshot, accessibility, css-vars, rulers,
@@ -7,6 +7,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 describe('background message handlers — free for everyone', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+    vi.restoreAllMocks();
   });
 
   async function loadBackground() {
@@ -14,9 +15,11 @@ describe('background message handlers — free for everyone', () => {
     background.default.main();
   }
 
-  async function send(message: any) {
-    const [result] = await fakeBrowser.runtime.onMessage.trigger(message, {} as any, () => {});
-    return result;
+  /** Deliver a message and resolve with what the handler passed to sendResponse. */
+  function send(message: any, sender: any = {}): Promise<any> {
+    return new Promise(resolve => {
+      void fakeBrowser.runtime.onMessage.trigger(message, sender, resolve);
+    });
   }
 
   it('getSettings never returns a license/pro/trial flag', async () => {
@@ -45,5 +48,39 @@ describe('background message handlers — free for everyone', () => {
 
     const allStored = await fakeBrowser.storage.local.get(null);
     expect(Object.keys(allStored)).not.toContain('proUnlocked');
+  });
+});
+
+describe('background frame relay', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.restoreAllMocks();
+  });
+
+  async function loadBackground() {
+    const background = await import('../entrypoints/background');
+    background.default.main();
+  }
+
+  it('relays an exit from one frame to every frame of the same tab', async () => {
+    const sendMessage = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined);
+    await loadBackground();
+
+    const results = await fakeBrowser.runtime.onMessage.trigger(
+      { action: 'dtp:broadcast', message: { action: 'dtp:deactivate' } },
+      { tab: { id: 42 }, frameId: 3 } as any,
+      () => {},
+    );
+    expect(results).toContain(true);
+    expect(sendMessage).toHaveBeenCalledWith(42, { action: 'dtp:deactivate' });
+  });
+
+  it('refuses to relay collectors or messages without a sender tab', async () => {
+    const sendMessage = vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined);
+    await loadBackground();
+
+    await fakeBrowser.runtime.onMessage.trigger({ action: 'dtp:broadcast', message: { action: 'dtp:collect', what: 'meta' } }, { tab: { id: 42 } } as any, () => {});
+    await fakeBrowser.runtime.onMessage.trigger({ action: 'dtp:broadcast', message: { action: 'dtp:deactivate' } }, {} as any, () => {});
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

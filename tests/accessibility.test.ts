@@ -19,8 +19,8 @@ describe('analyzeHeadings', () => {
   it('marks skipped heading levels', () => {
     const headings = [{ level: 1, text: 'Title' }, { level: 3, text: 'Skipped' }];
     const result = analyzeHeadings(headings);
-    expect(result[0].outOfOrder).toBe(false);
-    expect(result[1].outOfOrder).toBe(true);
+    expect(result[0]!.outOfOrder).toBe(false);
+    expect(result[1]!.outOfOrder).toBe(true);
   });
 
   it('handles empty headings', () => {
@@ -40,7 +40,7 @@ describe('analyzeHeadings', () => {
       { level: 2, text: 'Back up' },
     ];
     const result = analyzeHeadings(headings);
-    expect(result[2].outOfOrder).toBe(false); // Going up is fine
+    expect(result[2]!.outOfOrder).toBe(false); // Going up is fine
   });
 });
 
@@ -71,7 +71,7 @@ describe('analyzeIssues', () => {
     const issues = analyzeIssues({ ...baseData, imagesWithoutAlt: 3, imagesTotal: 10 });
     const imgIssues = issues.filter(i => i.category === 'Images' && i.type === 'error');
     expect(imgIssues).toHaveLength(1);
-    expect(imgIssues[0].message).toContain('3 images');
+    expect(imgIssues[0]!.message).toContain('3 images');
   });
 
   it('reports all images have alt as info', () => {
@@ -84,7 +84,7 @@ describe('analyzeIssues', () => {
     const issues = analyzeIssues({ ...baseData, htmlLang: '' });
     const langIssues = issues.filter(i => i.message.includes('lang'));
     expect(langIssues).toHaveLength(1);
-    expect(langIssues[0].type).toBe('error');
+    expect(langIssues[0]!.type).toBe('error');
   });
 
   it('reports missing title', () => {
@@ -103,7 +103,7 @@ describe('analyzeIssues', () => {
     const issues = analyzeIssues({ ...baseData, linksWithoutText: 2 });
     const linkIssues = issues.filter(i => i.category === 'Links');
     expect(linkIssues).toHaveLength(1);
-    expect(linkIssues[0].type).toBe('error');
+    expect(linkIssues[0]!.type).toBe('error');
   });
 
   it('reports form inputs without labels', () => {
@@ -116,7 +116,7 @@ describe('analyzeIssues', () => {
     const issues = analyzeIssues({ ...baseData, tabindexPositive: 3 });
     const focusIssues = issues.filter(i => i.category === 'Focus');
     expect(focusIssues).toHaveLength(1);
-    expect(focusIssues[0].type).toBe('warning');
+    expect(focusIssues[0]!.type).toBe('warning');
   });
 
   it('reports no headings', () => {
@@ -170,9 +170,9 @@ describe('sortIssues', () => {
       { type: 'warning', category: 'C', message: 'warning' },
     ];
     const sorted = sortIssues(issues);
-    expect(sorted[0].type).toBe('error');
-    expect(sorted[1].type).toBe('warning');
-    expect(sorted[2].type).toBe('info');
+    expect(sorted[0]!.type).toBe('error');
+    expect(sorted[1]!.type).toBe('warning');
+    expect(sorted[2]!.type).toBe('info');
   });
 
   it('does not mutate original array', () => {
@@ -181,6 +181,6 @@ describe('sortIssues', () => {
       { type: 'error', category: 'B', message: 'error' },
     ];
     sortIssues(issues);
-    expect(issues[0].type).toBe('info');
+    expect(issues[0]!.type).toBe('info');
   });
 });

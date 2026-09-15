@@ -19,10 +19,10 @@ describe('groupVariablesByScope', () => {
     ];
     const groups = groupVariablesByScope(vars);
     expect(groups).toHaveLength(2);
-    expect(groups[0].scope).toBe(':root');
-    expect(groups[0].variables).toHaveLength(2);
-    expect(groups[1].scope).toBe('.btn');
-    expect(groups[1].variables).toHaveLength(1);
+    expect(groups[0]!.scope).toBe(':root');
+    expect(groups[0]!.variables).toHaveLength(2);
+    expect(groups[1]!.scope).toBe('.btn');
+    expect(groups[1]!.variables).toHaveLength(1);
   });
 
   it('puts :root first regardless of input order', () => {
@@ -31,7 +31,7 @@ describe('groupVariablesByScope', () => {
       { name: '--y', value: '2', scope: ':root' },
     ];
     const groups = groupVariablesByScope(vars);
-    expect(groups[0].scope).toBe(':root');
+    expect(groups[0]!.scope).toBe(':root');
   });
 
   it('returns empty array for empty input', () => {
@@ -125,7 +125,7 @@ describe('deduplicateVariables', () => {
     ];
     const result = deduplicateVariables(vars);
     expect(result).toHaveLength(2);
-    expect(result[0].value).toBe('first');
+    expect(result[0]!.value).toBe('first');
   });
 });
 
@@ -146,7 +146,7 @@ describe('sortVariables', () => {
       { name: '--a', value: '2', scope: ':root' },
     ];
     sortVariables(vars);
-    expect(vars[0].name).toBe('--z');
+    expect(vars[0]!.name).toBe('--z');
   });
 });
 

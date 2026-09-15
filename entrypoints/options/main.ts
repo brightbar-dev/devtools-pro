@@ -3,8 +3,8 @@ const compactCheckbox = document.getElementById('compact-mode') as HTMLInputElem
 
 async function init() {
   const settings = await browser.storage.local.get(['theme', 'compactMode']);
-  themeSelect.value = settings.theme || 'auto';
-  compactCheckbox.checked = settings.compactMode || false;
+  themeSelect.value = (settings.theme as string | undefined) ?? 'auto';
+  compactCheckbox.checked = (settings.compactMode as boolean | undefined) ?? false;
 }
 
 themeSelect.addEventListener('change', () => {

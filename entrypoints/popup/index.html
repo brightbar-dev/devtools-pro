@@ -12,13 +12,15 @@
       <h1>DevTools Pro</h1>
     </header>
 
+    <div class="dtp-page-notice" id="page-notice" role="status" hidden></div>
+
     <section class="dtp-tools" id="tools-grid">
       <!-- Tool buttons rendered by main.ts -->
     </section>
 
     <section class="dtp-meta-panel" id="meta-panel" style="display:none">
       <div class="dtp-meta-header">
-        <button id="meta-back" class="dtp-back-btn" title="Back">&larr;</button>
+        <button id="meta-back" class="dtp-back-btn" title="Back" aria-label="Back to tools">&larr;</button>
         <span id="meta-title">Page Meta</span>
       </div>
       <div id="meta-content" class="dtp-meta-content"></div>
