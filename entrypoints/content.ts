@@ -18,6 +18,7 @@ import { compareSpecificity, sheetLabel, shorthandCandidates, specificity, split
 import { nonDefaultDeclarations } from '@/utils/css';
 import { copiedCssModel, copiedTailwindModel, cssRuleText, tailwindText } from '@/utils/copy-formats';
 import { toTailwind } from '@/utils/tailwind';
+import { CAPTURE_INTERVAL_MS, MAX_CAPTURE_HEIGHT, captureTiles, dataUrlBytes, deviceCrop, screenshotFilename, type CaptureKind } from '@/utils/capture';
 import { distanceGuides, formatLength, isDrag, rulerRect } from '@/utils/measure';
 import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
 import {
@@ -35,6 +36,7 @@ interface Ui {
   bar: HTMLDivElement;
   highlights: HTMLDivElement;
   drawings: HTMLDivElement;
+  toast: HTMLDivElement;
 }
 
 type Shown =
@@ -347,9 +349,12 @@ export default defineContentScript({
       const drawings = document.createElement('div');
       drawings.className = 'drawings';
       drawings.setAttribute('aria-hidden', 'true');
-      root.append(drawings, highlights, overlay, panel, bar);
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.setAttribute('role', 'status');
+      root.append(drawings, highlights, overlay, panel, bar, toast);
       root.addEventListener('click', onUiClick);
-      return { host, root, overlay, panel, bar, highlights, drawings };
+      return { host, root, overlay, panel, bar, highlights, drawings, toast };
     }
 
     function attachUi() {
@@ -656,21 +661,22 @@ export default defineContentScript({
       ui.bar.innerHTML = `<span class="chip" title="Active tool"><span class="dot" aria-hidden="true"></span>${escapeHtml(tool?.name ?? '')}</span>`
         + HOVER_TOOLS.map(t => `<button type="button" class="tb-btn${t.id === activeTool ? ' active' : ''}" data-tool="${t.id}"`
           + ` aria-pressed="${t.id === activeTool}" title="${escapeHtml(t.name)}">${escapeHtml(t.shortName)}</button>`).join('')
-        + ((tool?.actions?.length ?? 0) > 0 ? '<span class="sep" aria-hidden="true"></span>' : '')
+        + '<span class="sep" aria-hidden="true"></span>'
+        + '<button type="button" class="tb-btn tb-action" data-action="capture-element" title="Screenshot the hovered element (S)" aria-keyshortcuts="S">Capture</button>'
         + (tool?.actions ?? []).map(a => `<button type="button" class="tb-btn tb-action" data-action="${a.id}"`
           + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.label)}</button>`).join('')
         + `<span class="hint" aria-live="polite">${escapeHtml(status)}</span>`
         + '<button type="button" class="tb-close" data-close aria-label="Close DevTools Pro (Esc)" title="Close (Esc)">✕</button>';
     }
 
-    function flashHint(text: string) {
+    function flashHint(text: string, ms = 1200) {
       hint = text;
       renderBar();
       window.clearTimeout(hintTimer);
       hintTimer = window.setTimeout(() => {
         hint = '';
         renderBar();
-      }, 1200);
+      }, ms);
     }
 
     async function copyText(text: string): Promise<boolean> {
@@ -773,11 +779,12 @@ export default defineContentScript({
         return;
       }
       if (!renderHere || !activeTool || e.ctrlKey || e.metaKey || e.altKey || isEditable(e.composedPath()[0])) return;
-      const action = findTool(activeTool)?.actions?.find(a => a.key === e.key.toLowerCase());
-      if (!action) return;
+      const key = e.key.toLowerCase();
+      const actionId = key === 's' ? 'capture-element' : findTool(activeTool)?.actions?.find(a => a.key === key)?.id;
+      if (!actionId) return;
       e.preventDefault();
       e.stopPropagation();
-      void runAction(action.id);
+      void runAction(actionId);
     }
 
     // ── Tool actions (render root) ──────────────────────────────────────────
@@ -788,6 +795,7 @@ export default defineContentScript({
       else if (id === 'palette') showPalette();
       else if (id === 'copy-css') await copyStyles('css');
       else if (id === 'copy-tailwind') await copyStyles('tailwind');
+      else if (id === 'capture-element') await captureElementAction();
       else flashHint(`Unknown action "${id}"`);
     }
 
@@ -811,6 +819,163 @@ export default defineContentScript({
         const ok = await copyText(tailwindText(result));
         showStatic(copiedTailwindModel(result, path));
         flashHint(ok ? `Copied ${result.classes.length} classes${result.unmapped.length ? ` · ${result.unmapped.length} not mapped` : ''}` : 'Copy blocked by this page');
+      }
+    }
+
+    // ── Screenshots: one element or the full page, stitched from viewport captures ─
+
+    let lastCaptureAt = 0;
+    let toastTimer: number | undefined;
+    let capturing = false;
+
+    const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms));
+    const frames = (count: number) => new Promise<void>(resolve => {
+      const step = (left: number) => (left <= 0 ? resolve() : window.requestAnimationFrame(() => step(left - 1)));
+      step(count);
+    });
+
+    function showToast(text: string, ms = 6000) {
+      if (!ui) return;
+      ui.toast.textContent = text;
+      ui.toast.classList.add('show');
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        ui?.toast.classList.remove('show');
+        if (activeTool === null && highlighted.length === 0) detachUi();
+      }, ms);
+    }
+
+    /** One viewport capture, spaced to stay under Chrome's rate limit, after the page has painted. */
+    async function captureViewport(): Promise<ImageBitmap> {
+      const delay = lastCaptureAt + CAPTURE_INTERVAL_MS - Date.now();
+      if (delay > 0) await wait(delay);
+      await frames(2);
+      lastCaptureAt = Date.now();
+      const reply = await browser.runtime.sendMessage({ action: 'captureTab' });
+      if (typeof reply !== 'string') throw new Error((reply as { error?: string } | undefined)?.error ?? 'The browser did not return a capture');
+      const { mime, bytes } = dataUrlBytes(reply);
+      return createImageBitmap(new Blob([bytes], { type: mime }));
+    }
+
+    /** Hide fixed and sticky elements (so they appear once, not on every tile); returns the undo. */
+    function hideFixedElements(except?: Element): () => void {
+      const changed: Array<{ el: HTMLElement; value: string; priority: string }> = [];
+      for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+        if (el === ui?.host || (except && (el.contains(except) || except.contains(el)))) continue;
+        const position = window.getComputedStyle(el).position;
+        if (position !== 'fixed' && position !== 'sticky') continue;
+        changed.push({ el, value: el.style.getPropertyValue('visibility'), priority: el.style.getPropertyPriority('visibility') });
+        el.style.setProperty('visibility', 'hidden', 'important');
+      }
+      return () => {
+        for (const c of changed) {
+          if (c.value) c.el.style.setProperty('visibility', c.value, c.priority);
+          else c.el.style.removeProperty('visibility');
+        }
+      };
+    }
+
+    interface CaptureResult {
+      blob: Blob;
+      width: number;
+      height: number;
+      truncated: boolean;
+    }
+
+    /**
+     * Capture document rows [top, bottom) and columns [left, left + width) by scrolling and
+     * stitching viewport captures. Our own UI is hidden throughout; fixed and sticky elements
+     * are hidden after the first tile, or from the start for an element capture.
+     */
+    async function captureDocumentRange(left: number, width: number, top: number, bottom: number, target?: Element): Promise<CaptureResult> {
+      const scroller = document.scrollingElement ?? document.documentElement;
+      const start = { x: window.scrollX, y: window.scrollY };
+      const viewportHeight = window.innerHeight;
+      const end = Math.min(bottom, top + MAX_CAPTURE_HEIGHT);
+      const tiles = captureTiles(top, end, viewportHeight, scroller.scrollHeight - viewportHeight);
+      const host = ui?.host;
+      host?.style.setProperty('visibility', 'hidden', 'important');
+      let restoreFixed: (() => void) | null = target ? hideFixedElements(target) : null;
+      let canvas: OffscreenCanvas | null = null;
+      let context: OffscreenCanvasRenderingContext2D | null = null;
+      let dpr = window.devicePixelRatio || 1;
+      try {
+        for (const [i, tile] of tiles.entries()) {
+          window.scrollTo({ top: tile.scrollY, left: 0, behavior: 'instant' });
+          if (i === 1 && !restoreFixed) restoreFixed = hideFixedElements();
+          const bitmap = await captureViewport();
+          dpr = bitmap.width / window.innerWidth;
+          if (!canvas) {
+            canvas = new OffscreenCanvas(Math.max(1, Math.round(width * dpr)), Math.max(1, Math.round((end - top) * dpr)));
+            context = canvas.getContext('2d');
+          }
+          const src = deviceCrop({ left, top: tile.fromY - window.scrollY, width, height: tile.height }, dpr, bitmap);
+          context?.drawImage(bitmap, src.sx, src.sy, src.sw, src.sh, 0, Math.round((tile.fromY - top) * dpr), src.sw, src.sh);
+          bitmap.close();
+        }
+      } finally {
+        restoreFixed?.();
+        window.scrollTo({ top: start.y, left: start.x, behavior: 'instant' });
+        host?.style.removeProperty('visibility');
+      }
+      if (!canvas) throw new Error('Nothing to capture');
+      return { blob: await canvas.convertToBlob({ type: 'image/png' }), width: canvas.width, height: canvas.height, truncated: bottom > end };
+    }
+
+    async function deliverCapture(kind: CaptureKind, result: CaptureResult) {
+      const name = screenshotFilename(kind, location.hostname, new Date());
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      // Inside our shadow root, so the inspector's own click interception lets it through.
+      (ui?.root ?? document.documentElement).append(link);
+      link.click();
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        link.remove();
+      }, 30000);
+      let copied = false;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': result.blob })]);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      showToast(`Saved ${name} · ${result.width} × ${result.height} px${copied ? ' · copied to the clipboard' : ''}${result.truncated ? ' · cut at 16,000px' : ''}`);
+    }
+
+    async function captureElementAction() {
+      const el = currentElement() ?? hovered;
+      if (!el || capturing) {
+        flashHint(capturing ? 'Already capturing' : 'Hover an element, then press S');
+        return;
+      }
+      capturing = true;
+      try {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+        const rect = el.getBoundingClientRect();
+        const result = await captureDocumentRange(Math.max(0, rect.left), Math.min(rect.width, window.innerWidth - Math.max(0, rect.left)), rect.top + window.scrollY, rect.bottom + window.scrollY, el);
+        await deliverCapture('element', result);
+      } catch (err) {
+        showToast(`Could not capture: ${(err as Error).message}`);
+      } finally {
+        capturing = false;
+      }
+    }
+
+    async function capturePageAction() {
+      if (capturing) return;
+      capturing = true;
+      attachUi();
+      try {
+        const scroller = document.scrollingElement ?? document.documentElement;
+        const result = await captureDocumentRange(0, window.innerWidth, 0, scroller.scrollHeight);
+        await deliverCapture('page', result);
+      } catch (err) {
+        showToast(`Could not capture the page: ${(err as Error).message}`);
+      } finally {
+        capturing = false;
       }
     }
 
@@ -1386,6 +1551,7 @@ export default defineContentScript({
         case 'dtp:activate':
           try {
             activate(message.toolId);
+            if (message.hint && renderHere) flashHint(message.hint, 6000);
             sendResponse({ ok: true, activeTool } satisfies InspectorReply);
           } catch (err) {
             sendResponse({ ok: false, error: (err as Error).message } satisfies InspectorReply);
@@ -1403,6 +1569,12 @@ export default defineContentScript({
           return false;
         case 'dtp:collect':
           if (isTop) sendResponse(collect(message.what));
+          return false;
+        case 'dtp:capture-page':
+          if (isTop) {
+            void capturePageAction();
+            sendResponse({ ok: true } satisfies InspectorReply);
+          }
           return false;
         case 'dtp:highlight':
           if (isTop) sendResponse({ ok: true, found: highlight(message.ids) } satisfies InspectorReply);

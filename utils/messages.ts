@@ -6,7 +6,8 @@ import type { PanelModel } from './inspect';
 export type CollectKind = 'meta' | 'css-vars' | 'accessibility' | 'assets';
 
 export type InspectorMessage =
-  | { action: 'dtp:activate'; toolId: string }
+  | { action: 'dtp:activate'; toolId: string; hint?: string }
+  | { action: 'dtp:capture-page' }
   | { action: 'dtp:deactivate' }
   | { action: 'dtp:pin'; pinned: boolean }
   | { action: 'dtp:state' }
