@@ -18,7 +18,8 @@ export const PROPERTY_CATEGORIES: Record<string, string[]> = {
     'float', 'clear', 'z-index', 'overflow', 'overflow-x', 'overflow-y',
     'box-sizing', 'visibility', 'opacity',
   ],
-  'Flexbox': [
+  // Alignment and gaps apply to grid containers too, so this category shows for both.
+  'Flex & Alignment': [
     'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-content',
     'flex-grow', 'flex-shrink', 'flex-basis', 'align-self', 'order', 'gap',
     'row-gap', 'column-gap',
@@ -121,6 +122,27 @@ const DEFAULTS: Record<string, string[]> = {
   'row-gap': ['normal'],
   'column-gap': ['normal'],
   'grid-auto-flow': ['row'],
+  top: ['auto'],
+  right: ['auto'],
+  bottom: ['auto'],
+  left: ['auto'],
+  'min-width': ['auto', '0px'],
+  'min-height': ['auto', '0px'],
+  'max-width': ['none'],
+  'max-height': ['none'],
+  'margin-top': ['0px'],
+  'margin-right': ['0px'],
+  'margin-bottom': ['0px'],
+  'margin-left': ['0px'],
+  'padding-top': ['0px'],
+  'padding-right': ['0px'],
+  'padding-bottom': ['0px'],
+  'padding-left': ['0px'],
+  'border-radius': ['0px'],
+  'border-top-left-radius': ['0px'],
+  'border-top-right-radius': ['0px'],
+  'border-bottom-right-radius': ['0px'],
+  'border-bottom-left-radius': ['0px'],
 };
 
 /** Check if a CSS value is the browser default for that property. */
@@ -161,9 +183,33 @@ export function formatCssBlock(rules: Array<{ prop: string; value: string }>): s
   return rules.map(r => `  ${formatCssRule(r.prop, r.value)}`).join('\n');
 }
 
+export interface CategorizedDeclaration {
+  category: string;
+  prop: string;
+  value: string;
+}
+
+/** The computed declarations the CSS Inspector shows: relevant categories, defaults skipped, in panel order. */
+export function nonDefaultDeclarations(style: (prop: string) => string): CategorizedDeclaration[] {
+  const display = style('display');
+  const out: CategorizedDeclaration[] = [];
+  for (const [category, props] of Object.entries(PROPERTY_CATEGORIES)) {
+    if (!isCategoryRelevant(category, display)) continue;
+    for (const prop of props) {
+      const value = style(prop);
+      if (!value || isDefaultValue(prop, value)) continue;
+      // A border side with no width shows nothing, so its colour and style are noise.
+      const side = prop.match(/^border-(top|right|bottom|left)-(color|style)$/);
+      if (side && style(`border-${side[1]}-width`) === '0px') continue;
+      out.push({ category, prop, value });
+    }
+  }
+  return out;
+}
+
 /** Determine if a property category is relevant for a given display value. */
 export function isCategoryRelevant(category: string, display: string): boolean {
-  if (category === 'Flexbox') return display.includes('flex');
+  if (category === 'Flex & Alignment') return display.includes('flex') || display.includes('grid');
   if (category === 'Grid') return display.includes('grid');
   return true;
 }

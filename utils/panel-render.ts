@@ -39,9 +39,10 @@ function copyAttrs(copy: string | undefined): string {
 
 function renderRow(r: PanelRow): string {
   const swatch = r.swatch ? `<span class="swatch"${styleAttr({ background: r.swatch })}></span>` : '';
+  const detail = r.detail ? `<span class="prop-detail">${escapeHtml(r.detail)}</span>` : '';
   return `<div class="prop${r.copy ? ' copyable' : ''}"${copyAttrs(r.copy)}>`
     + `<span class="prop-name">${escapeHtml(r.label)}</span>`
-    + `<span class="prop-val">${swatch}${escapeHtml(r.value)}</span></div>`;
+    + `<span class="prop-val">${swatch}${escapeHtml(r.value)}</span>${detail}</div>`;
 }
 
 function renderSides(s: BoxSides): string {
@@ -89,6 +90,8 @@ function renderBlock(block: PanelBlock): string {
       return `<div class="font-preview"${styleAttr(block.style)}>${escapeHtml(block.text)}</div>`;
     case 'note':
       return `<div class="note">${escapeHtml(block.text)}</div>`;
+    case 'code':
+      return `<pre class="code copyable"${copyAttrs(block.text)}>${escapeHtml(block.text)}</pre>`;
   }
 }
 

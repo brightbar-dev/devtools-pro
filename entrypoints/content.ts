@@ -13,7 +13,11 @@ import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/util
 import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
 import { addRecentColor, buildPalette, type ColorUse } from '@/utils/palette';
 import { paletteModel, pickedColorModel } from '@/utils/color-panels';
-import { boxModelOf } from '@/utils/inspect';
+import { boxModelOf, type AuthoredValue } from '@/utils/inspect';
+import { compareSpecificity, sheetLabel, shorthandCandidates, specificity, splitSelectorList, winningDeclarations, type AuthoredDeclaration, type Specificity } from '@/utils/cascade';
+import { nonDefaultDeclarations } from '@/utils/css';
+import { copiedCssModel, copiedTailwindModel, cssRuleText, tailwindText } from '@/utils/copy-formats';
+import { toTailwind } from '@/utils/tailwind';
 import { distanceGuides, formatLength, isDrag, rulerRect } from '@/utils/measure';
 import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
 import {
@@ -255,6 +259,7 @@ export default defineContentScript({
           viewport: { width: window.innerWidth, height: window.innerHeight },
           path: pathOf(el),
           anchor,
+          authored: toolId === 'css-inspect' ? authoredFor(el) : undefined,
         });
       } catch (err) {
         return { toolId, title: 'DevTools Pro', path: pathOf(el), blocks: [{ kind: 'note', text: `Could not inspect this element: ${(err as Error).message}` }] };
@@ -781,7 +786,129 @@ export default defineContentScript({
       if (!renderHere || !activeTool) return;
       if (id === 'eyedropper') await pickPixel();
       else if (id === 'palette') showPalette();
+      else if (id === 'copy-css') await copyStyles('css');
+      else if (id === 'copy-tailwind') await copyStyles('tailwind');
       else flashHint(`Unknown action "${id}"`);
+    }
+
+    /** Copy the hovered (or pinned) element's computed styles, then show exactly what was copied. */
+    async function copyStyles(format: 'css' | 'tailwind') {
+      const el = currentElement();
+      if (!el) {
+        flashHint(shown?.source === 'frame' ? 'Copy works on elements of the top page' : 'Hover an element first');
+        return;
+      }
+      const cs = window.getComputedStyle(el);
+      const decls = nonDefaultDeclarations(prop => cs.getPropertyValue(prop)).map(({ prop, value }) => ({ prop, value }));
+      const path = pathOf(el);
+      if (format === 'css') {
+        const text = cssRuleText(elementSelector({ tagName: el.tagName, id: el.id, className: classNameOf(el) }), decls, path);
+        const ok = await copyText(text);
+        showStatic(copiedCssModel(text, decls.length, path));
+        flashHint(ok ? 'Copied as CSS · click the page to go back' : 'Copy blocked by this page');
+      } else {
+        const result = toTailwind(decls);
+        const ok = await copyText(tailwindText(result));
+        showStatic(copiedTailwindModel(result, path));
+        flashHint(ok ? `Copied ${result.classes.length} classes${result.unmapped.length ? ` · ${result.unmapped.length} not mapped` : ''}` : 'Copy blocked by this page');
+      }
+    }
+
+    // ── Authored CSS: which same-origin rule set each property ──────────────
+
+    interface FlatRule {
+      branches: Array<{ text: string; spec: Specificity }>;
+      style: CSSStyleDeclaration;
+      order: number;
+      source: string;
+    }
+
+    const ruleCache = new WeakMap<Document | ShadowRoot, { key: string; rules: FlatRule[] }>();
+
+    function stylesheetsOf(root: Document | ShadowRoot): CSSStyleSheet[] {
+      return [...Array.from(root.styleSheets), ...Array.from(root.adoptedStyleSheets ?? [])];
+    }
+
+    /** Style rules that can apply, in document order: media and supports conditions evaluated, layers and containers flattened. */
+    function flatRules(root: Document | ShadowRoot): FlatRule[] {
+      const sheets = stylesheetsOf(root);
+      const key = sheets.map(sheet => {
+        try {
+          return `${sheet.href ?? ''}#${sheet.cssRules.length}${sheet.disabled ? 'x' : ''}`;
+        } catch {
+          return `${sheet.href ?? ''}#cors`;
+        }
+      }).join('|');
+      const cached = ruleCache.get(root);
+      if (cached?.key === key) return cached.rules;
+      const rules: FlatRule[] = [];
+      const visit = (list: CSSRuleList, source: string) => {
+        for (const rule of Array.from(list)) {
+          if (rule instanceof CSSStyleRule) {
+            const branches = splitSelectorList(rule.selectorText).map(text => ({ text, spec: specificity(text) }));
+            rules.push({ branches, style: rule.style, order: rules.length, source });
+          } else if (rule instanceof CSSMediaRule) {
+            if (window.matchMedia(rule.media.mediaText).matches) visit(rule.cssRules, source);
+          } else if (rule instanceof CSSSupportsRule) {
+            if (CSS.supports(rule.conditionText)) visit(rule.cssRules, source);
+          } else if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules, source); // @layer, @container, @scope: included without evaluating
+          }
+        }
+      };
+      for (const sheet of sheets) {
+        if (sheet.disabled) continue;
+        try {
+          visit(sheet.cssRules, sheetLabel(sheet.href));
+        } catch {
+          // cross-origin stylesheet: its rules cannot be read
+        }
+      }
+      ruleCache.set(root, { key, rules });
+      return rules;
+    }
+
+    function declarationsFrom(style: CSSStyleDeclaration, base: Omit<AuthoredDeclaration, 'prop' | 'value' | 'important'>, out: AuthoredDeclaration[]) {
+      for (let i = 0; i < style.length; i++) {
+        const prop = style.item(i);
+        let value = style.getPropertyValue(prop);
+        if (!value) {
+          // `padding: var(--x)` leaves its longhands empty in CSSOM; the shorthand holds the authored text.
+          for (const shorthand of shorthandCandidates(prop)) {
+            value = style.getPropertyValue(shorthand);
+            if (value) break;
+          }
+        }
+        if (value) out.push({ ...base, prop, value: value.trim(), important: style.getPropertyPriority(prop) === 'important' });
+      }
+    }
+
+    function authoredFor(el: Element): Record<string, AuthoredValue> {
+      const root = el.getRootNode();
+      const scope: Document | ShadowRoot = root instanceof ShadowRoot ? root : document;
+      const decls: AuthoredDeclaration[] = [];
+      try {
+        for (const rule of flatRules(scope)) {
+          let best: { text: string; spec: Specificity } | null = null;
+          for (const branch of rule.branches) {
+            let matches = false;
+            try {
+              matches = el.matches(branch.text);
+            } catch {
+              matches = false; // pseudo-elements and unsupported selectors
+            }
+            if (matches && (!best || compareSpecificity(branch.spec, best.spec) > 0)) best = branch;
+          }
+          if (best) declarationsFrom(rule.style, { selector: best.text, specificity: best.spec, order: rule.order, source: rule.source }, decls);
+        }
+        const inline = (el as HTMLElement).style;
+        if (inline) declarationsFrom(inline, { selector: 'style=""', specificity: [0, 0, 0], order: Number.MAX_SAFE_INTEGER, source: 'inline', inline: true }, decls);
+      } catch {
+        return {};
+      }
+      const out: Record<string, AuthoredValue> = {};
+      for (const [prop, decl] of winningDeclarations(decls)) out[prop] = { value: decl.value, selector: decl.selector, source: decl.source };
+      return out;
     }
 
     function showStatic(model: PanelModel) {

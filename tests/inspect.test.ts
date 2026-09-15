@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPanelModel, boxModelOf, selectorOf, type InspectTarget, type PanelBlock, type PanelModel } from '../utils/inspect';
+import { authoredDetail, buildPanelModel, boxModelOf, selectorOf, type InspectTarget, type PanelBlock, type PanelModel } from '../utils/inspect';
 import { UnknownToolError } from '../utils/tools';
 import type { Rect } from '../utils/geometry';
 
@@ -76,9 +76,29 @@ describe('CSS Inspector', () => {
     expect(typography.rows).toEqual([{ label: 'color', value: 'rgb(255, 255, 255)', swatch: 'rgb(255, 255, 255)', copy: 'color: rgb(255, 255, 255);' }]);
   });
 
+  it('shows where an authored value came from under the computed one', () => {
+    const model = buildPanelModel('css-inspect', fake({ styles: { display: 'grid', 'padding-top': '16px', 'row-gap': '16px' } }), {
+      ...ctx,
+      authored: {
+        'padding-top': { value: 'var(--space-md)', selector: '.grid-demo', source: '<style>' },
+        display: { value: 'grid', selector: '.grid-demo', source: 'site.css' },
+      },
+    });
+    const layout = rowsBlock(model, 'Layout');
+    expect(layout.rows[0]).toEqual({ label: 'display', value: 'grid', copy: 'display: grid;', detail: '.grid-demo · site.css' });
+    const box = rowsBlock(model, 'Box Model');
+    expect(box.rows[0]).toMatchObject({ label: 'padding-top', value: '16px', detail: 'var(--space-md) · .grid-demo · <style>' });
+    expect(rowsBlock(model, 'Flex & Alignment').rows[0]).toEqual({ label: 'row-gap', value: '16px', copy: 'row-gap: 16px;' });
+  });
+
+  it('formats authored details, collapsing whitespace before comparing', () => {
+    expect(authoredDetail('8px 16px', { value: '8px  16px', selector: 'p', source: 'a.css' })).toBe('p · a.css');
+    expect(authoredDetail('8px', undefined)).toBeUndefined();
+  });
+
   it('skips the flexbox and grid categories for non-flex, non-grid elements', () => {
     const model = buildPanelModel('css-inspect', fake({ styles: { display: 'block', 'flex-direction': 'column', 'grid-template-columns': '1fr' } }), ctx);
-    expect(model.blocks.some(b => b.kind === 'rows' && (b.title === 'Flexbox' || b.title === 'Grid'))).toBe(false);
+    expect(model.blocks.some(b => b.kind === 'rows' && (b.title === 'Flex & Alignment' || b.title === 'Grid'))).toBe(false);
   });
 });
 

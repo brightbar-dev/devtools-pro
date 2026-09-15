@@ -92,13 +92,14 @@ describe('formatCssBlock', () => {
 });
 
 describe('isCategoryRelevant', () => {
-  it('Flexbox relevant for flex display', () => {
-    expect(isCategoryRelevant('Flexbox', 'flex')).toBe(true);
-    expect(isCategoryRelevant('Flexbox', 'inline-flex')).toBe(true);
+  it('Flex & Alignment relevant for flex and grid display', () => {
+    expect(isCategoryRelevant('Flex & Alignment', 'flex')).toBe(true);
+    expect(isCategoryRelevant('Flex & Alignment', 'inline-flex')).toBe(true);
+    expect(isCategoryRelevant('Flex & Alignment', 'grid')).toBe(true);
   });
 
-  it('Flexbox not relevant for block', () => {
-    expect(isCategoryRelevant('Flexbox', 'block')).toBe(false);
+  it('Flex & Alignment not relevant for block', () => {
+    expect(isCategoryRelevant('Flex & Alignment', 'block')).toBe(false);
   });
 
   it('Grid relevant for grid display', () => {

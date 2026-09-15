@@ -43,6 +43,10 @@ describe('tool actions', () => {
     expect(getTool('color-picker').actions?.map(a => [a.id, a.key])).toEqual([['eyedropper', 'e'], ['palette', 'p']]);
   });
 
+  it('gives the CSS Inspector Copy CSS (C) and Copy Tailwind (T)', () => {
+    expect(getTool('css-inspect').actions?.map(a => [a.id, a.key])).toEqual([['copy-css', 'c'], ['copy-tailwind', 't']]);
+  });
+
   it('uses single lower-case keys that do not clash within a tool or with Escape', () => {
     for (const tool of TOOLS) {
       const keys = (tool.actions ?? []).map(a => a.key);

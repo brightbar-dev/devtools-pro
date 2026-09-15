@@ -52,6 +52,15 @@ describe('renderPanelHtml', () => {
     expect(html).not.toContain('evil.example');
   });
 
+  it('renders a row detail line and a code block, escaped', () => {
+    const html = renderPanelHtml(model([
+      { kind: 'rows', rows: [{ label: 'padding-top', value: '16px', detail: 'var(--x) · .a > b · <style>' }] },
+      { kind: 'code', text: 'a > b {\n  color: red;\n}' },
+    ]));
+    expect(html).toContain('<span class="prop-detail">var(--x) · .a &gt; b · &lt;style&gt;</span>');
+    expect(html).toContain('<pre class="code copyable" data-copy="a &gt; b {\n  color: red;\n}"');
+  });
+
   it('renders the title and a shortened path with the full path in its tooltip', () => {
     const path = ['html', 'body', 'main', 'section', 'div', 'span'].map(label => ({ label }));
     const html = renderPanelHtml(model([], path));
