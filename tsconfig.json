@@ -1,6 +1,4 @@
 {
   "extends": "./.wxt/tsconfig.json",
-  // store-assets/capture-screenshots.ts is a standalone Playwright script with its own
-  // dependencies; it is not part of the extension build.
-  "exclude": ["**/node_modules", ".output", "store-assets"]
+  "exclude": ["**/node_modules", ".output"]
 }
