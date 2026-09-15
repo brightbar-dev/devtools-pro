@@ -216,6 +216,17 @@ describe('Rulers', () => {
   });
 });
 
+describe('Live Edit', () => {
+  it('invites a click on hover', () => {
+    const model = buildPanelModel('live-edit', fake({ tag: 'span', className: 'pill', rect: { left: 0, top: 0, width: 72.4, height: 33.6 } }), ctx);
+    expect(model.title).toBe('Live Edit');
+    expect(model.blocks).toEqual([
+      { kind: 'rows', rows: [{ label: 'Element', value: 'span.pill' }, { label: 'Size', value: '72 x 34' }] },
+      { kind: 'note', text: 'Click to edit its text, spacing, colours and font size.' },
+    ]);
+  });
+});
+
 describe('Measure — anchor', () => {
   it('adds distances to the anchor first when one is set', () => {
     const model = buildPanelModel('rulers', fake({ rect: { left: 140, top: 10, width: 60, height: 60 } }), { ...ctx, anchor: { left: 0, top: 0, width: 100, height: 50 } });

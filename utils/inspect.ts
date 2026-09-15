@@ -13,6 +13,7 @@ import { parsePx, type BoxModel, type BoxSides } from './spacing';
 import { elementSelector, formatDimensions, textPreview, type PathSegment } from './dom';
 import { getHoverTool, UnknownToolError } from './tools';
 import { distanceGuides, formatLength } from './measure';
+import type { EditFormState } from './edit-form';
 import type { Rect, Size } from './geometry';
 
 /** What the builders may read about an element. Every accessor is lazy, so a tool reads only what it shows. */
@@ -62,6 +63,7 @@ export type PanelBlock =
   | { kind: 'contrast'; ratio: number; rating: string; levels: ReturnType<typeof contrastLevels> }
   | { kind: 'swatches'; title: string; swatches: Swatch[] }
   | { kind: 'code'; text: string }
+  | { kind: 'edit-form'; state: EditFormState }
   | { kind: 'box'; box: BoxModel }
   | { kind: 'preview'; text: string; style: Record<string, string> }
   | { kind: 'note'; text: string };
@@ -103,6 +105,7 @@ function blocksFor(toolId: string, t: InspectTarget, ctx: BuildContext): PanelBl
     case 'element-info': return elementBlocks(t);
     case 'rulers': return rulerBlocks(t, ctx.viewport, ctx.anchor);
     case 'grid-overlay': return gridBlocks(t);
+    case 'live-edit': return liveEditBlocks(t);
     default: throw new UnknownToolError(toolId, 'has no panel builder');
   }
 }
@@ -199,6 +202,13 @@ function fontBlocks(t: InspectTarget): PanelBlock[] {
       style: { 'font-family': family, 'font-size': size, 'font-weight': weight, 'font-style': fontStyle, color: t.style('color') },
     },
     { kind: 'rows', rows },
+  ];
+}
+
+function liveEditBlocks(t: InspectTarget): PanelBlock[] {
+  return [
+    { kind: 'rows', rows: [row('Element', selectorOf(t)), row('Size', formatDimensions(t.rect.width, t.rect.height))] },
+    { kind: 'note', text: 'Click to edit its text, spacing, colours and font size.' },
   ];
 }
 

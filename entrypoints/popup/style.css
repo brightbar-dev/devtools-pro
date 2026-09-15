@@ -87,6 +87,14 @@ body {
   background: color-mix(in srgb, var(--dtp-primary) 8%, var(--dtp-surface));
 }
 
+/* The thirteenth tool spans the grid rather than leaving an orphan cell. */
+.dtp-tool-btn[data-tool="live-edit"] {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+}
+
 .dtp-tool-btn.dtp-active {
   border-color: var(--dtp-primary);
   background: color-mix(in srgb, var(--dtp-primary) 15%, var(--dtp-surface));

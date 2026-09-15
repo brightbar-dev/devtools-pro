@@ -19,6 +19,8 @@ import { nonDefaultDeclarations } from '@/utils/css';
 import { copiedCssModel, copiedTailwindModel, cssRuleText, tailwindText } from '@/utils/copy-formats';
 import { toTailwind } from '@/utils/tailwind';
 import { CAPTURE_INTERVAL_MS, MAX_CAPTURE_HEIGHT, captureTiles, dataUrlBytes, deviceCrop, screenshotFilename, type CaptureKind } from '@/utils/capture';
+import { changesAsCss, emptyHistory, netChanges, recordEdit, redo, resetEdits, TEXT_PROP, undo, type Edit } from '@/utils/edits';
+import { SIDES, editValue, toColorInput, type EditFormState } from '@/utils/edit-form';
 import { distanceGuides, formatLength, isDrag, rulerRect } from '@/utils/measure';
 import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
 import {
@@ -89,6 +91,11 @@ export default defineContentScript({
     let ruler: Rect | null = null;
     let suppressClick = false;
     const pinnedContainers = new Set<Element>();
+    // Live Edit state (render root only). The history outlives tool switches until the page reloads.
+    let editHistory = emptyHistory();
+    const editTargets: Element[] = [];
+    let editTarget: Element | null = null;
+    let editGesture = 0;
     let hintTimer: number | undefined;
     const frameCache = new WeakMap<object, FrameElement>();
 
@@ -354,6 +361,9 @@ export default defineContentScript({
       toast.setAttribute('role', 'status');
       root.append(drawings, highlights, overlay, panel, bar, toast);
       root.addEventListener('click', onUiClick);
+      root.addEventListener('input', onUiInput);
+      root.addEventListener('focusin', onUiGestureStart);
+      root.addEventListener('pointerdown', onUiGestureStart);
       return { host, root, overlay, panel, bar, highlights, drawings, toast };
     }
 
@@ -657,7 +667,9 @@ export default defineContentScript({
     function renderBar() {
       if (!ui) return;
       const tool = activeTool ? getHoverTool(activeTool) : null;
-      const status = hint || (pinned ? 'Pinned · click the page to release' : `${tool?.hint ?? 'Click to pin'} · Esc to exit`);
+      const status = hint || (activeTool === 'live-edit' && editTarget
+        ? 'Editing · ⌘/Ctrl+Z undo · click another element'
+        : pinned ? 'Pinned · click the page to release' : `${tool?.hint ?? 'Click to pin'} · Esc to exit`);
       ui.bar.innerHTML = `<span class="chip" title="Active tool"><span class="dot" aria-hidden="true"></span>${escapeHtml(tool?.name ?? '')}</span>`
         + HOVER_TOOLS.map(t => `<button type="button" class="tb-btn${t.id === activeTool ? ' active' : ''}" data-tool="${t.id}"`
           + ` aria-pressed="${t.id === activeTool}" title="${escapeHtml(t.name)}">${escapeHtml(t.shortName)}</button>`).join('')
@@ -705,6 +717,11 @@ export default defineContentScript({
     function onUiClick(e: Event) {
       const target = e.target as Element | null;
       if (!target) return;
+      const editBtn = target.closest<HTMLElement>('[data-edit-action]');
+      if (editBtn?.dataset.editAction) {
+        void runEditAction(editBtn.dataset.editAction);
+        return;
+      }
       const copyEl = target.closest<HTMLElement>('[data-copy]');
       if (copyEl) {
         void copyText(copyEl.dataset.copy ?? '').then(ok => {
@@ -748,6 +765,10 @@ export default defineContentScript({
         suppressClick = false; // the click that ends a ruler drag
         return;
       }
+      if (activeTool === 'live-edit') {
+        if (renderHere) selectForEdit(deepElementFromPoint(e.clientX, e.clientY));
+        return;
+      }
       if (activeTool === 'rulers' || activeTool === 'grid-overlay') {
         if (renderHere) {
           if (activeTool === 'rulers') toggleAnchor();
@@ -770,6 +791,17 @@ export default defineContentScript({
         exitEverywhere();
         return;
       }
+      if (activeTool === 'live-edit' && renderHere && (e.metaKey || e.ctrlKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        const ours = Boolean(ui && e.composedPath().includes(ui.host));
+        if ((key === 'z' || key === 'y') && (ours || editHistory.done.length > 0 || editHistory.undone.length > 0)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (key === 'y' || e.shiftKey) redoEdit();
+          else undoEdit();
+          return;
+        }
+      }
       if (e.key === 'Alt') {
         if (activeTool === 'rulers') e.preventDefault(); // keep the browser menu from taking focus
         if (!altHeld) {
@@ -778,6 +810,8 @@ export default defineContentScript({
         }
         return;
       }
+      // Keys typed into our own panel (e.g. the Live Edit form) are text, not shortcuts.
+      if (ui && e.composedPath().includes(ui.host)) return;
       if (!renderHere || !activeTool || e.ctrlKey || e.metaKey || e.altKey || isEditable(e.composedPath()[0])) return;
       const key = e.key.toLowerCase();
       const actionId = key === 's' ? 'capture-element' : findTool(activeTool)?.actions?.find(a => a.key === key)?.id;
@@ -819,6 +853,182 @@ export default defineContentScript({
         const ok = await copyText(tailwindText(result));
         showStatic(copiedTailwindModel(result, path));
         flashHint(ok ? `Copied ${result.classes.length} classes${result.unmapped.length ? ` · ${result.unmapped.length} not mapped` : ''}` : 'Copy blocked by this page');
+      }
+    }
+
+    // ── Live Edit: text, spacing, colour and font size, with a real undo ────
+
+    function targetKey(el: Element): number {
+      const index = editTargets.indexOf(el);
+      return index >= 0 ? index : editTargets.push(el) - 1;
+    }
+
+    function readEditable(el: Element, prop: string): string {
+      if (prop === TEXT_PROP) return el.textContent ?? '';
+      return (el as HTMLElement).style?.getPropertyValue(prop) ?? '';
+    }
+
+    /** Edits are inline `!important` declarations so page CSS cannot override them; '' removes ours. */
+    function writeEditable(el: Element, prop: string, value: string) {
+      if (prop === TEXT_PROP) {
+        el.textContent = value;
+        return;
+      }
+      const style = (el as HTMLElement).style;
+      if (!style) return;
+      if (value) style.setProperty(prop, value, 'important');
+      else style.removeProperty(prop);
+    }
+
+    /** Selector for exported changes: nearest id, else a tag path with :nth-of-type where needed. */
+    function cssSelectorFor(el: Element): string {
+      const parts: string[] = [];
+      for (let node: Element | null = el; node && node !== document.documentElement; node = node.parentElement) {
+        if (node.id) {
+          parts.unshift(`#${CSS.escape(node.id)}`);
+          break;
+        }
+        const tag = node.tagName.toLowerCase();
+        const siblings = node.parentElement ? Array.from(node.parentElement.children).filter(c => c.tagName === node!.tagName) : [];
+        parts.unshift(siblings.length > 1 ? `${tag}:nth-of-type(${siblings.indexOf(node) + 1})` : tag);
+        if (tag === 'body') break;
+      }
+      return parts.join(' > ');
+    }
+
+    function editStateFor(el: Element): EditFormState {
+      const cs = window.getComputedStyle(el);
+      const text = el.textContent ?? '';
+      return {
+        selector: formatPath(pathOf(el), 3),
+        text: el.children.length === 0 && text.length <= 5000 ? text : null,
+        margin: SIDES.map(side => parsePx(cs.getPropertyValue(`margin-${side}`))),
+        padding: SIDES.map(side => parsePx(cs.getPropertyValue(`padding-${side}`))),
+        color: toColorInput(cs.color),
+        background: toColorInput(cs.backgroundColor),
+        backgroundTransparent: parseColor(cs.backgroundColor)?.a === 0,
+        fontSize: parsePx(cs.fontSize),
+        canUndo: editHistory.done.length > 0,
+        canRedo: editHistory.undone.length > 0,
+        changes: netChanges(editHistory).length,
+      };
+    }
+
+    function showEditForm() {
+      if (!editTarget) return;
+      shown = {
+        source: 'self',
+        el: editTarget,
+        model: { toolId: 'live-edit', title: 'Live Edit', path: pathOf(editTarget), blocks: [{ kind: 'edit-form', state: editStateFor(editTarget) }] },
+      };
+      draw();
+      renderBar();
+    }
+
+    function selectForEdit(el: Element | null) {
+      if (!el || el === ui?.host) return;
+      editTarget = el;
+      targetKey(el);
+      pinned = true;
+      showEditForm();
+    }
+
+    function onUiGestureStart(e: Event) {
+      if ((e.target as Element | null)?.closest?.('[data-edit]')) editGesture++;
+    }
+
+    function onUiInput(e: Event) {
+      const input = (e.target as Element | null)?.closest<HTMLInputElement | HTMLTextAreaElement>('[data-edit]');
+      const prop = input?.dataset.edit;
+      if (!input || !prop || !editTarget || activeTool !== 'live-edit') return;
+      const el = editTarget;
+      const value = editValue(prop, input.value);
+      const before = readEditable(el, prop);
+      writeEditable(el, prop, value);
+      editHistory = recordEdit(editHistory, { target: targetKey(el), prop, before, after: value, gesture: editGesture });
+      updateEditControls();
+    }
+
+    /** Refresh buttons and the change count without re-rendering the form, so the field keeps focus. */
+    function updateEditControls() {
+      if (!ui) return;
+      const changes = netChanges(editHistory).length;
+      const enable = (action: string, on: boolean) => {
+        const button = ui!.panel.querySelector<HTMLButtonElement>(`[data-edit-action="${action}"]`);
+        if (button) button.disabled = !on;
+      };
+      enable('undo', editHistory.done.length > 0);
+      enable('redo', editHistory.undone.length > 0);
+      enable('reset-all', changes > 0);
+      enable('copy', changes > 0);
+      const note = ui.panel.querySelector('.edit-form > .ef-note:last-child');
+      if (note) note.textContent = `${changes} change${changes === 1 ? '' : 's'} on this page · edits stay until you reload`;
+      scrollFrame.schedule(); // the element may have changed size
+    }
+
+    const describeEdits = (edits: Edit[]) => (edits.length === 1 ? (edits[0]!.prop === TEXT_PROP ? 'text' : edits[0]!.prop) : `${edits.length} changes`);
+
+    function applyEdits(edits: Edit[], side: 'before' | 'after') {
+      for (const edit of edits) {
+        const el = editTargets[edit.target];
+        if (el?.isConnected) writeEditable(el, edit.prop, edit[side]);
+      }
+    }
+
+    function undoEdit() {
+      const { history, revert } = undo(editHistory);
+      if (revert.length === 0) {
+        flashHint('Nothing to undo');
+        return;
+      }
+      editHistory = history;
+      applyEdits(revert, 'before');
+      editGesture++;
+      showEditForm();
+      flashHint(`Undid ${describeEdits(revert)}`);
+    }
+
+    function redoEdit() {
+      const { history, apply } = redo(editHistory);
+      if (apply.length === 0) {
+        flashHint('Nothing to redo');
+        return;
+      }
+      editHistory = history;
+      applyEdits(apply, 'after');
+      editGesture++;
+      showEditForm();
+      flashHint(`Redid ${describeEdits(apply)}`);
+    }
+
+    async function runEditAction(action: string) {
+      if (action === 'undo') undoEdit();
+      else if (action === 'redo') redoEdit();
+      else if (action === 'reset-element' || action === 'reset-all') {
+        const target = action === 'reset-element' && editTarget ? targetKey(editTarget) : undefined;
+        if (action === 'reset-element' && target === undefined) return;
+        const { history, apply } = resetEdits(editHistory, ++editGesture, target);
+        editGesture++;
+        if (apply.length === 0) {
+          flashHint('Nothing to reset');
+          return;
+        }
+        editHistory = history;
+        applyEdits(apply, 'after');
+        showEditForm();
+        flashHint(action === 'reset-all' ? 'Reset every change · Undo brings them back' : 'Reset this element · Undo brings it back', 2500);
+      } else if (action === 'copy') {
+        const css = changesAsCss(editHistory, t => {
+          const el = editTargets[t];
+          return el?.isConnected ? cssSelectorFor(el) : '/* element no longer on the page */';
+        });
+        const ok = await copyText(css);
+        flashHint(ok ? 'Copied changes as CSS' : 'Copy blocked by this page');
+      } else if (action === 'done') {
+        editTarget = null;
+        setPinned(false);
+        hideHighlight();
+        renderBar();
       }
     }
 
@@ -1170,6 +1380,7 @@ export default defineContentScript({
       suppressClick = false;
       altHeld = false;
       pinnedContainers.clear();
+      editTarget = null;
       ui?.drawings.replaceChildren();
     }
 

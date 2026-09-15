@@ -9,6 +9,7 @@ import { escapeHtml, formatPath } from './dom';
 import { formatPx } from './spacing';
 import type { BoxSides } from './spacing';
 import type { PanelBlock, PanelModel, PanelRow } from './inspect';
+import { editFormHtml } from './edit-form';
 
 /** A CSS value that is safe inside a style attribute (no declaration breaks, no resource loads), or null. */
 export function safeCssValue(value: string): string | null {
@@ -90,6 +91,8 @@ function renderBlock(block: PanelBlock): string {
       return `<div class="font-preview"${styleAttr(block.style)}>${escapeHtml(block.text)}</div>`;
     case 'note':
       return `<div class="note">${escapeHtml(block.text)}</div>`;
+    case 'edit-form':
+      return editFormHtml(block.state);
     case 'code':
       return `<pre class="code copyable"${copyAttrs(block.text)}>${escapeHtml(block.text)}</pre>`;
   }
