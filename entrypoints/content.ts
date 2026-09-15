@@ -673,6 +673,11 @@ export default defineContentScript({
 
     function renderBar() {
       if (!ui) return;
+      if (!activeTool) {
+        // No tool: no bar. A late hint timer must not bring it back.
+        ui.bar.replaceChildren();
+        return;
+      }
       const tool = activeTool ? getHoverTool(activeTool) : null;
       const status = hint || (activeTool === 'live-edit' && editTarget
         ? 'Editing · ⌘/Ctrl+Z undo · click another element'
@@ -1528,6 +1533,8 @@ export default defineContentScript({
       window.removeEventListener('mouseup', onMouseUp, true);
       window.removeEventListener('keyup', onKeyUp, true);
       resetDrawnState();
+      window.clearTimeout(hintTimer);
+      hint = '';
       restoreCursor();
       clearHighlights();
       detachUi();
