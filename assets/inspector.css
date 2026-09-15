@@ -59,6 +59,8 @@
   color: #a5b4fc;
 }
 
+.panel-path:empty { display: none; }
+
 .panel-path {
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
   font-size: 11px;
@@ -154,6 +156,60 @@
   padding: 2px 6px;
   border-radius: 3px;
 }
+
+.levels {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 2px 8px;
+  padding: 0 4px 6px;
+  font-size: 11px;
+  align-items: center;
+}
+
+.lvl-label { color: #94a3b8; }
+.lvl { font-weight: 600; }
+.lvl.pass { color: #6ee7b7; }
+.lvl.miss { color: #fca5a5; }
+
+.sw-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 4px 4px;
+}
+
+.sw {
+  appearance: none;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  background:
+    repeating-conic-gradient(#555 0% 25%, #888 0% 50%) 0 0 / 10px 10px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.sw-chip {
+  position: absolute;
+  inset: 0;
+}
+
+.sw-count {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+  font-size: 9px;
+  line-height: 13px;
+}
+
+.sw:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 1px; }
 
 .aaa { background: #065f46; color: #6ee7b7; }
 .aa { background: #1e3a5f; color: #7dd3fc; }
@@ -319,6 +375,15 @@
 .tb-btn:hover, .tb-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .tb-btn.active { background: #4f46e5; color: #fff; }
 .tb-btn:focus-visible, .tb-close:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 1px; }
+
+.sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: #3b3b5c;
+}
+
+.tb-action { color: #a5b4fc; }
 
 .hint {
   color: #94a3b8;

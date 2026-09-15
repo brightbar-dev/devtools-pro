@@ -93,11 +93,21 @@ export interface ContrastAudit {
   manual: ManualContrastCheck[];
 }
 
-/** Ratio of the text colour, faded by any translucency or opacity, against its background. */
-export function sampleRatio(sample: TextSample, bg: { color: RGBA; opacity: number }): { ratio: number; fg: RGBA } {
-  const alpha = sample.color.a * bg.opacity;
-  const fg = alpha >= 1 ? { ...sample.color, a: 1 } : compositeOver({ ...sample.color, a: alpha }, bg.color);
+/** Ratio of a text colour, faded by any translucency or opacity, against its background. */
+export function textContrast(color: RGBA, bg: { color: RGBA; opacity: number }): { ratio: number; fg: RGBA } {
+  const alpha = color.a * bg.opacity;
+  const fg = alpha >= 1 ? { ...color, a: 1 } : compositeOver({ ...color, a: alpha }, bg.color);
   return { ratio: contrastRatio(fg, bg.color), fg };
+}
+
+/** Which WCAG levels a ratio meets, for normal and large text. */
+export function contrastLevels(ratio: number): { normal: { aa: boolean; aaa: boolean }; large: { aa: boolean; aaa: boolean } } {
+  const normal = requiredRatios(false);
+  const large = requiredRatios(true);
+  return {
+    normal: { aa: ratio >= normal.aa, aaa: ratio >= normal.aaa },
+    large: { aa: ratio >= large.aa, aaa: ratio >= large.aaa },
+  };
 }
 
 export function auditTextContrast(samples: TextSample[], canvas: RGBA): ContrastAudit {
@@ -109,7 +119,7 @@ export function auditTextContrast(samples: TextSample[], canvas: RGBA): Contrast
       continue;
     }
     audit.checked++;
-    const { ratio, fg } = sampleRatio(sample, bg);
+    const { ratio, fg } = textContrast(sample.color, bg);
     const large = isLargeText(sample.fontSizePx, sample.fontWeight);
     const { aa, aaa } = requiredRatios(large);
     const finding = (required: number): ContrastFinding => ({

@@ -1,7 +1,7 @@
 import inspectorCss from '@/assets/inspector.css?inline';
 import { buildPanelModel, type InspectTarget, type PanelModel } from '@/utils/inspect';
 import { renderPanelHtml } from '@/utils/panel-render';
-import { HOVER_TOOLS, getHoverTool } from '@/utils/tools';
+import { HOVER_TOOLS, findTool, getHoverTool } from '@/utils/tools';
 import { coalesceToFrames } from '@/utils/schedule';
 import { frameContentOffset, placePanel, sameRect, toRect, translateRect, type Rect } from '@/utils/geometry';
 import { elementSelector, escapeHtml, formatPath, textPreview, type PathSegment } from '@/utils/dom';
@@ -11,6 +11,8 @@ import type { CssVariable } from '@/utils/css-vars';
 import { parseColor, type RGBA } from '@/utils/colors';
 import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/utils/contrast';
 import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
+import { addRecentColor, buildPalette, type ColorUse } from '@/utils/palette';
+import { paletteModel, pickedColorModel } from '@/utils/color-panels';
 import {
   FRAME_PROTOCOL, parseFrameMessage,
   type BroadcastRequest, type CollectKind, type FrameMessage, type InspectorMessage, type InspectorReply,
@@ -28,6 +30,7 @@ interface Ui {
 }
 
 type Shown =
+  | { source: 'static'; model: PanelModel }
   | { source: 'self'; el: Element; model: PanelModel }
   | { source: 'frame'; frame: FrameElement; rect: Rect; model: PanelModel };
 
@@ -372,20 +375,25 @@ export default defineContentScript({
     function draw() {
       if (!ui || !shown) return;
       let rect: Rect;
-      if (shown.source === 'self') {
-        if (!shown.el.isConnected) return hideHighlight();
-        rect = toRect(shown.el.getBoundingClientRect());
+      if (shown.source === 'static') {
+        // Not about an element: sit above the tool bar.
+        rect = toRect(ui.bar.getBoundingClientRect());
+        ui.overlay.style.display = 'none';
       } else {
-        if (!shown.frame.isConnected) return hideHighlight();
-        const { dx, dy } = frameOffset(shown.frame);
-        rect = translateRect(shown.rect, dx, dy);
+        if (shown.source === 'self') {
+          if (!shown.el.isConnected) return hideHighlight();
+          rect = toRect(shown.el.getBoundingClientRect());
+        } else {
+          if (!shown.frame.isConnected) return hideHighlight();
+          const { dx, dy } = frameOffset(shown.frame);
+          rect = translateRect(shown.rect, dx, dy);
+        }
+        const o = ui.overlay.style;
+        o.transform = `translate(${rect.left}px, ${rect.top}px)`;
+        o.width = `${rect.width}px`;
+        o.height = `${rect.height}px`;
+        o.display = 'block';
       }
-
-      const o = ui.overlay.style;
-      o.transform = `translate(${rect.left}px, ${rect.top}px)`;
-      o.width = `${rect.width}px`;
-      o.height = `${rect.height}px`;
-      o.display = 'block';
 
       if (renderedModel !== shown.model) {
         raiseAboveModal();
@@ -421,6 +429,9 @@ export default defineContentScript({
       ui.bar.innerHTML = `<span class="chip" title="Active tool"><span class="dot" aria-hidden="true"></span>${escapeHtml(tool?.name ?? '')}</span>`
         + HOVER_TOOLS.map(t => `<button type="button" class="tb-btn${t.id === activeTool ? ' active' : ''}" data-tool="${t.id}"`
           + ` aria-pressed="${t.id === activeTool}" title="${escapeHtml(t.name)}">${escapeHtml(t.shortName)}</button>`).join('')
+        + ((tool?.actions?.length ?? 0) > 0 ? '<span class="sep" aria-hidden="true"></span>' : '')
+        + (tool?.actions ?? []).map(a => `<button type="button" class="tb-btn tb-action" data-action="${a.id}"`
+          + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.label)}</button>`).join('')
         + `<span class="hint" aria-live="polite">${escapeHtml(status)}</span>`
         + '<button type="button" class="tb-close" data-close aria-label="Close DevTools Pro (Esc)" title="Close (Esc)">✕</button>';
     }
@@ -470,6 +481,11 @@ export default defineContentScript({
         });
         return;
       }
+      const actionBtn = target.closest<HTMLElement>('[data-action]');
+      if (actionBtn?.dataset.action) {
+        void runAction(actionBtn.dataset.action);
+        return;
+      }
       const toolBtn = target.closest<HTMLElement>('[data-tool]');
       if (toolBtn?.dataset.tool) {
         broadcast({ action: 'dtp:activate', toolId: toolBtn.dataset.tool });
@@ -499,11 +515,103 @@ export default defineContentScript({
       broadcast({ action: 'dtp:pin', pinned });
     }
 
+    function isEditable(node: EventTarget | undefined): boolean {
+      return node instanceof HTMLElement && (node.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName));
+    }
+
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        exitEverywhere();
+        return;
+      }
+      if (!renderHere || !activeTool || e.ctrlKey || e.metaKey || e.altKey || isEditable(e.composedPath()[0])) return;
+      const action = findTool(activeTool)?.actions?.find(a => a.key === e.key.toLowerCase());
+      if (!action) return;
       e.preventDefault();
       e.stopPropagation();
-      exitEverywhere();
+      void runAction(action.id);
+    }
+
+    // ── Tool actions (render root) ──────────────────────────────────────────
+
+    async function runAction(id: string) {
+      if (!renderHere || !activeTool) return;
+      if (id === 'eyedropper') await pickPixel();
+      else if (id === 'palette') showPalette();
+      else flashHint(`Unknown action "${id}"`);
+    }
+
+    function showStatic(model: PanelModel) {
+      setPinned(true);
+      shown = { source: 'static', model };
+      draw();
+    }
+
+    async function rememberColor(hex: string): Promise<string[]> {
+      try {
+        const stored = await browser.storage.local.get('recentColors');
+        const recent = addRecentColor(Array.isArray(stored.recentColors) ? stored.recentColors as string[] : [], hex);
+        await browser.storage.local.set({ recentColors: recent });
+        return recent;
+      } catch {
+        return [hex];
+      }
+    }
+
+    /** The native EyeDropper samples any pixel on screen (images, gradients, canvas) with no permission. */
+    async function pickPixel() {
+      const EyeDropperCtor = (window as Window & { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper;
+      if (typeof EyeDropperCtor !== 'function') {
+        flashHint(window.isSecureContext ? 'This browser has no eyedropper' : 'The eyedropper needs an https page');
+        return;
+      }
+      setPinned(true);
+      if (ui) {
+        // Keep our own outline and panel out of the sample.
+        ui.overlay.style.display = 'none';
+        ui.panel.style.display = 'none';
+      }
+      try {
+        const { sRGBHex } = await new EyeDropperCtor().open();
+        const recent = await rememberColor(sRGBHex);
+        showStatic(pickedColorModel(sRGBHex, recent));
+        flashHint(`Picked ${sRGBHex} · click a value to copy`);
+      } catch (err) {
+        setPinned(false);
+        if ((err as DOMException)?.name !== 'AbortError') flashHint(`Eyedropper unavailable: ${(err as Error).message}`);
+      }
+    }
+
+    /** Every distinct colour in computed styles, by role, with counts. */
+    function showPalette() {
+      const uses: ColorUse[] = [];
+      let scanned = 0;
+      for (const root of allRoots()) {
+        for (const el of root.querySelectorAll('*')) {
+          if (++scanned > 20000) break;
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none') continue;
+          uses.push({ role: 'background', value: cs.backgroundColor });
+          if (Array.from(el.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim())) {
+            uses.push({ role: 'text', value: cs.color });
+          }
+          for (const side of ['top', 'right', 'bottom', 'left']) {
+            if (parsePx(cs.getPropertyValue(`border-${side}-width`)) > 0 && cs.getPropertyValue(`border-${side}-style`) !== 'none') {
+              uses.push({ role: 'border', value: cs.getPropertyValue(`border-${side}-color`) });
+            }
+          }
+          if (el instanceof SVGElement) {
+            for (const prop of ['fill', 'stroke']) {
+              const value = cs.getPropertyValue(prop);
+              if (value && value !== 'none' && !value.startsWith('url(')) uses.push({ role: 'svg', value });
+            }
+          }
+        }
+      }
+      showStatic(paletteModel(buildPalette(uses)));
+      flashHint('Click a swatch to copy · click the page to go back');
     }
 
     function onScroll() {
