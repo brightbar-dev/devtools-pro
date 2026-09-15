@@ -7,7 +7,7 @@
 
 import { parseColor, toHex, toRgb, toHsl, toOklch, wcagRating, type RGBA } from './colors';
 import { contrastLevels, effectiveBackground, textContrast, type BackgroundLayer } from './contrast';
-import { PROPERTY_CATEGORIES, isDefaultValue, isCategoryRelevant, formatCssRule } from './css';
+import { formatCssRule, nonDefaultDeclarations } from './css';
 import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont } from './fonts';
 import { parsePx, type BoxModel, type BoxSides } from './spacing';
 import { elementSelector, formatDimensions, textPreview, type PathSegment } from './dom';
@@ -37,6 +37,8 @@ export interface PanelRow {
   swatch?: string;
   /** Text copied when the row is clicked. */
   copy?: string;
+  /** A secondary line, e.g. where an authored value came from. */
+  detail?: string;
 }
 
 export interface ColorEntry {
@@ -59,6 +61,7 @@ export type PanelBlock =
   | { kind: 'colors'; colors: ColorEntry[] }
   | { kind: 'contrast'; ratio: number; rating: string; levels: ReturnType<typeof contrastLevels> }
   | { kind: 'swatches'; title: string; swatches: Swatch[] }
+  | { kind: 'code'; text: string }
   | { kind: 'box'; box: BoxModel }
   | { kind: 'preview'; text: string; style: Record<string, string> }
   | { kind: 'note'; text: string };
@@ -75,6 +78,14 @@ export interface BuildContext {
   path: PathSegment[];
   /** The Measure tool's anchored element, when one is set. */
   anchor?: Rect;
+  /** Winning authored declarations for the element, by property (CSS Inspector). */
+  authored?: Record<string, AuthoredValue>;
+}
+
+export interface AuthoredValue {
+  value: string;
+  selector: string;
+  source: string;
 }
 
 /** Build the panel for a hover tool. Throws `UnknownToolError` for ids that are not hover tools. */
@@ -85,7 +96,7 @@ export function buildPanelModel(toolId: string, target: InspectTarget, ctx: Buil
 
 function blocksFor(toolId: string, t: InspectTarget, ctx: BuildContext): PanelBlock[] {
   switch (toolId) {
-    case 'css-inspect': return cssBlocks(t);
+    case 'css-inspect': return cssBlocks(t, ctx.authored);
     case 'color-picker': return colorBlocks(t);
     case 'font-detect': return fontBlocks(t);
     case 'spacing': return spacingBlocks(t);
@@ -104,18 +115,25 @@ function row(label: string, value: string, extra: Partial<PanelRow> = {}): Panel
   return { label, value, ...extra };
 }
 
-function cssBlocks(t: InspectTarget): PanelBlock[] {
-  const display = t.style('display');
+/** "var(--space-md) · .grid-demo · site.css" — the authored value when it differs, then where it was set. */
+export function authoredDetail(computed: string, authored: AuthoredValue | undefined): string | undefined {
+  if (!authored) return undefined;
+  const where = `${authored.selector} · ${authored.source}`;
+  return authored.value.replace(/\s+/g, ' ') === computed ? where : `${authored.value} · ${where}`;
+}
+
+function cssBlocks(t: InspectTarget, authored?: Record<string, AuthoredValue>): PanelBlock[] {
   const blocks: PanelBlock[] = [];
-  for (const [category, props] of Object.entries(PROPERTY_CATEGORIES)) {
-    if (!isCategoryRelevant(category, display)) continue;
-    const rows: PanelRow[] = [];
-    for (const prop of props) {
-      const value = t.style(prop);
-      if (!value || isDefaultValue(prop, value)) continue;
-      rows.push(row(prop, value, { swatch: parseColor(value) ? value : undefined, copy: formatCssRule(prop, value) }));
-    }
-    if (rows.length > 0) blocks.push({ kind: 'rows', title: category, rows });
+  for (const decl of nonDefaultDeclarations(prop => t.style(prop))) {
+    const r = row(decl.prop, decl.value, {
+      swatch: parseColor(decl.value) ? decl.value : undefined,
+      copy: formatCssRule(decl.prop, decl.value),
+      detail: authoredDetail(decl.value, authored?.[decl.prop]),
+    });
+    if (r.detail === undefined) delete r.detail;
+    const last = blocks.at(-1);
+    if (last?.kind === 'rows' && last.title === decl.category) last.rows.push(r);
+    else blocks.push({ kind: 'rows', title: decl.category, rows: [r] });
   }
   return blocks;
 }

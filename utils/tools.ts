@@ -30,7 +30,14 @@ export interface Tool {
 }
 
 export const TOOLS: Tool[] = [
-  { id: 'css-inspect', name: 'CSS Inspector', shortName: 'CSS', icon: '{}', description: 'Inspect computed CSS on any element', kind: 'hover' },
+  {
+    id: 'css-inspect', name: 'CSS Inspector', shortName: 'CSS', icon: '{}', kind: 'hover',
+    description: 'Computed and authored CSS; copy as CSS or Tailwind classes',
+    actions: [
+      { id: 'copy-css', label: 'Copy CSS', key: 'c', description: 'Copy the element’s styles as a CSS rule' },
+      { id: 'copy-tailwind', label: 'Copy Tailwind', key: 't', description: 'Copy the element’s styles as Tailwind classes' },
+    ],
+  },
   {
     id: 'color-picker', name: 'Color Picker', shortName: 'Color', icon: '🎨', kind: 'hover',
     description: 'Hover colours with AA/AAA contrast, eyedropper any pixel, page palette',

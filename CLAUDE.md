@@ -23,7 +23,10 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/palette.ts** — Page palette: computed colours grouped by role (backgrounds, text, borders, SVG), counted, as CSS custom properties; recent-picks list.
 - **utils/color-panels.ts** — Panel models for the eyedropper result and the page palette.
 - **utils/contrast.ts** — Page-wide text contrast: effective background behind text (translucent layers composited, images and gradients flagged for a manual check), WCAG large-text rules, AA/AAA audit.
-- **utils/css.ts** — CSS property categorization (7 categories), default value detection, formatting.
+- **utils/css.ts** — CSS property categorization (7 categories; "Flex & Alignment" shows for flex and grid containers), initial-value detection, `nonDefaultDeclarations` shared by the CSS panel and copy.
+- **utils/cascade.ts** — Selector-list splitting, Selectors 4 specificity (`:is`/`:not`/`:has`/`:where`, `nth-child(of)`), which authored declaration wins (importance, inline, specificity, order), shorthand fallback for `var()` longhands.
+- **utils/copy-formats.ts** — Copy as a CSS rule (path comment, no redundant shorthands) or Tailwind classes, and the panels showing what was copied.
+- **utils/tailwind.ts** — Best-effort computed CSS → Tailwind v3/v4 classes (spacing scale or arbitrary values), with every declaration it cannot map listed rather than dropped.
 - **utils/fonts.ts** — Font stack parsing, weight naming, shorthand generation.
 - **utils/spacing.ts** — Box model measurement, px parsing, sides formatting.
 - **utils/dom.ts** — Element selector generation, composed-path formatting, meta tag categorization.
@@ -44,6 +47,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Box model visualization with nested colored layers (margin/border/padding/content); WCAG contrast between text color and background; CSS properties organized by category with defaults hidden; font preview renders in the detected font.
 
 ## More tool notes
+- **CSS Inspector**: Computed values by category with initial values hidden (including zero margins/paddings and colours of zero-width borders). Under each value, the authored source when a same-origin rule set it: `var(--space-md) · .grid-demo · site.css`, or `style="" · inline`. Rules come from the element's root (document or shadow root) including adopted sheets, with `@media`/`@supports` evaluated and `@layer`/`@container` flattened; flattened rules are cached per root until the sheets change. Tool-bar actions: **Copy CSS (C)** copies the element's styles as a rule; **Copy Tailwind (T)** copies classes and lists anything not mapped. Both show what was copied in a pinned panel.
 - **Color Picker**: Hovering shows text, background and border colours in hex, rgb, hsl and oklch. The background is the effective one behind the element: transparent layers are walked out to the first opaque background, and translucent ones are blended. Contrast is shown with AA/AAA for normal and large text; an image or gradient background points to the eyedropper instead. Tool-bar actions: **Eyedropper (E)** uses the native `EyeDropper` API (no permission, secure pages) to sample any pixel, shows it in all formats with contrast on white and black, and keeps recent picks in `storage.local`. **Palette (P)** lists every distinct computed colour on the page by role with use counts; click a swatch to copy, or copy all as CSS custom properties.
 - **Tool actions**: A hover tool's `actions` appear in the on-page tool bar with single-key shortcuts (ignored while typing in a field). Panels that are not about an element (palette, eyedropper result) sit above the tool bar and stay pinned until the page is clicked.
 - **Screenshot**: Uses `browser.tabs.captureVisibleTab()`, auto-downloads as PNG
