@@ -26,7 +26,7 @@ export const TOOLS: Tool[] = [
   { id: 'element-info', name: 'Element Info', shortName: 'Element', icon: '<>', description: 'Tag, classes, dimensions, position', kind: 'hover' },
   { id: 'meta-tags', name: 'Page Meta', shortName: 'Meta', icon: 'ℹ', description: 'View meta tags, Open Graph, viewport', kind: 'page' },
   { id: 'screenshot', name: 'Screenshot', shortName: 'Shot', icon: '📸', description: 'Capture the visible part of the page as PNG', kind: 'capture' },
-  { id: 'accessibility', name: 'Accessibility', shortName: 'A11y', icon: 'A11y', description: 'Headings, landmarks, ARIA roles, alt text, labels', kind: 'page' },
+  { id: 'accessibility', name: 'Accessibility', shortName: 'A11y', icon: 'A11y', description: 'Audit contrast, alt text, labels, headings and landmarks, with WCAG references', kind: 'page' },
   { id: 'css-vars', name: 'CSS Variables', shortName: 'Vars', icon: '--', description: 'List all CSS custom properties', kind: 'page' },
   { id: 'rulers', name: 'Rulers', shortName: 'Rulers', icon: '📏', description: 'Measure distances between elements', kind: 'hover' },
   { id: 'grid-overlay', name: 'Grid Overlay', shortName: 'Grid', icon: '▦', description: 'Visualize grid and flexbox layouts', kind: 'hover' },
