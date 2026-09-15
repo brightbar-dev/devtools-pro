@@ -83,27 +83,54 @@ describe('CSS Inspector', () => {
 });
 
 describe('Color Picker', () => {
-  it('reads only the three colors it shows', () => {
+  const contrastOf = (model: PanelModel) => model.blocks.find((b): b is Extract<PanelBlock, { kind: 'contrast' }> => b.kind === 'contrast');
+  const colorsOf = (model: PanelModel) => model.blocks.find((b): b is Extract<PanelBlock, { kind: 'colors' }> => b.kind === 'colors')?.colors ?? [];
+
+  it('reads colour, background and opacity properties only — no layout', () => {
     const reads: string[] = [];
     buildPanelModel('color-picker', fake({ styles: { color: '#fff', 'background-color': '#e03131' } }, reads), ctx);
-    expect(reads.sort()).toEqual(['background-color', 'border-top-color', 'color']);
+    expect(new Set(reads)).toEqual(new Set(['color', 'background-color', 'background-image', 'opacity', 'border-top-color']));
   });
 
-  it('reports text, background and a WCAG contrast rating', () => {
+  it('reports text and background in four formats with AA/AAA for normal and large text', () => {
     const model = buildPanelModel('color-picker', fake({
       styles: { color: 'rgb(255, 255, 255)', 'background-color': 'rgb(224, 49, 49)', 'border-top-color': 'rgba(0, 0, 0, 0)' },
     }), ctx);
-    const colors = model.blocks.find(b => b.kind === 'colors');
-    expect(colors).toMatchObject({ colors: [{ label: 'Text', hex: '#ffffff' }, { label: 'Background', hex: '#e03131', rgb: 'rgb(224, 49, 49)' }] });
-    const contrast = model.blocks.find((b): b is Extract<PanelBlock, { kind: 'contrast' }> => b.kind === 'contrast');
+    expect(colorsOf(model)).toMatchObject([
+      { label: 'Text', hex: '#ffffff', oklch: 'oklch(100% 0 0)' },
+      { label: 'Background', hex: '#e03131', rgb: 'rgb(224, 49, 49)' },
+    ]);
+    const contrast = contrastOf(model);
     expect(contrast?.ratio).toBeGreaterThan(4.5);
     expect(contrast?.ratio).toBeLessThan(4.53);
     expect(contrast?.rating).toBe('AA');
+    expect(contrast?.levels).toEqual({ normal: { aa: true, aaa: false }, large: { aa: true, aaa: true } });
   });
 
-  it('omits contrast when the background is transparent', () => {
-    const model = buildPanelModel('color-picker', fake({ styles: { color: '#000', 'background-color': 'rgba(0, 0, 0, 0)' } }), ctx);
-    expect(model.blocks.some(b => b.kind === 'contrast')).toBe(false);
+  it('measures against the background behind a transparent element', () => {
+    const parent = fake({ styles: { 'background-color': 'rgb(255, 255, 255)' } });
+    const model = buildPanelModel('color-picker', fake({ styles: { color: 'rgb(118, 118, 118)', 'background-color': 'rgba(0, 0, 0, 0)' }, parent }), ctx);
+    expect(colorsOf(model)[1]).toMatchObject({ label: 'Background (behind)', hex: '#ffffff' });
+    expect(contrastOf(model)?.levels.normal).toEqual({ aa: true, aaa: false });
+  });
+
+  it('blends a translucent background into the one behind it', () => {
+    const parent = fake({ styles: { 'background-color': 'rgb(255, 255, 255)' } });
+    const model = buildPanelModel('color-picker', fake({ styles: { color: 'rgb(0, 0, 0)', 'background-color': 'rgba(0, 0, 0, 0.5)' }, parent }), ctx);
+    expect(colorsOf(model)[1]).toMatchObject({ label: 'Background (blended)', hex: '#808080' });
+  });
+
+  it('points to the eyedropper when the background is an image or gradient', () => {
+    const model = buildPanelModel('color-picker', fake({ styles: { color: 'rgb(255, 255, 255)', 'background-image': 'linear-gradient(red, blue)' } }), ctx);
+    expect(contrastOf(model)).toBeUndefined();
+    expect(model.blocks.at(-1)).toMatchObject({ kind: 'note', text: expect.stringContaining('eyedropper') });
+  });
+
+  it('shows a border colour only when the border has width', () => {
+    const noWidth = buildPanelModel('color-picker', fake({ styles: { color: '#000', 'background-color': '#fff', 'border-top-color': 'rgb(0, 0, 0)', 'border-top-width': '0px' } }), ctx);
+    expect(colorsOf(noWidth).map(c => c.label)).toEqual(['Text', 'Background']);
+    const withWidth = buildPanelModel('color-picker', fake({ styles: { color: '#000', 'background-color': '#fff', 'border-top-color': 'rgb(204, 204, 204)', 'border-top-width': '1px' } }), ctx);
+    expect(colorsOf(withWidth).map(c => c.label)).toEqual(['Text', 'Background', 'Border']);
   });
 });
 

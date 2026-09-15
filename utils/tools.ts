@@ -8,6 +8,14 @@
  */
 export type ToolKind = 'hover' | 'page' | 'capture';
 
+/** An on-page action a hover tool offers in the tool bar, with a single-key shortcut. */
+export interface ToolAction {
+  id: string;
+  label: string;
+  key: string;
+  description: string;
+}
+
 export interface Tool {
   id: string;
   name: string;
@@ -16,11 +24,19 @@ export interface Tool {
   icon: string;
   description: string;
   kind: ToolKind;
+  actions?: ToolAction[];
 }
 
 export const TOOLS: Tool[] = [
   { id: 'css-inspect', name: 'CSS Inspector', shortName: 'CSS', icon: '{}', description: 'Inspect computed CSS on any element', kind: 'hover' },
-  { id: 'color-picker', name: 'Color Picker', shortName: 'Color', icon: '🎨', description: 'Pick colors and copy as hex/rgb/hsl', kind: 'hover' },
+  {
+    id: 'color-picker', name: 'Color Picker', shortName: 'Color', icon: '🎨', kind: 'hover',
+    description: 'Hover colours with AA/AAA contrast, eyedropper any pixel, page palette',
+    actions: [
+      { id: 'eyedropper', label: 'Eyedropper', key: 'e', description: 'Pick any pixel on the screen' },
+      { id: 'palette', label: 'Palette', key: 'p', description: 'Every colour used on this page' },
+    ],
+  },
   { id: 'font-detect', name: 'Font Detector', shortName: 'Font', icon: 'Aa', description: 'Detect fonts, sizes, weights on any element', kind: 'hover' },
   { id: 'spacing', name: 'Spacing', shortName: 'Spacing', icon: '⬜', description: 'Visualize margins, padding, and borders', kind: 'hover' },
   { id: 'element-info', name: 'Element Info', shortName: 'Element', icon: '<>', description: 'Tag, classes, dimensions, position', kind: 'hover' },

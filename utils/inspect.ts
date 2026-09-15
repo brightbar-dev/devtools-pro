@@ -5,7 +5,8 @@
  * (structured clone) to be rendered there.
  */
 
-import { parseColor, toHex, toRgb, toHsl, contrastRatio, wcagRating, type RGBA } from './colors';
+import { parseColor, toHex, toRgb, toHsl, toOklch, wcagRating, type RGBA } from './colors';
+import { contrastLevels, effectiveBackground, textContrast, type BackgroundLayer } from './contrast';
 import { PROPERTY_CATEGORIES, isDefaultValue, isCategoryRelevant, formatCssRule } from './css';
 import { parseFontStack, weightName, formatSizeLineHeight, isGenericFont } from './fonts';
 import { parsePx, type BoxModel, type BoxSides } from './spacing';
@@ -42,12 +43,21 @@ export interface ColorEntry {
   hex: string;
   rgb: string;
   hsl: string;
+  oklch: string;
+}
+
+export interface Swatch {
+  color: string;
+  label: string;
+  copy: string;
+  count?: number;
 }
 
 export type PanelBlock =
   | { kind: 'rows'; title?: string; rows: PanelRow[] }
   | { kind: 'colors'; colors: ColorEntry[] }
-  | { kind: 'contrast'; ratio: number; rating: string }
+  | { kind: 'contrast'; ratio: number; rating: string; levels: ReturnType<typeof contrastLevels> }
+  | { kind: 'swatches'; title: string; swatches: Swatch[] }
   | { kind: 'box'; box: BoxModel }
   | { kind: 'preview'; text: string; style: Record<string, string> }
   | { kind: 'note'; text: string };
@@ -107,22 +117,41 @@ function cssBlocks(t: InspectTarget): PanelBlock[] {
   return blocks;
 }
 
-function colorEntry(label: string, c: RGBA): ColorEntry {
-  return { label, hex: toHex(c), rgb: toRgb(c), hsl: toHsl(c) };
+export function colorEntry(label: string, c: RGBA): ColorEntry {
+  return { label, hex: toHex(c), rgb: toRgb(c), hsl: toHsl(c), oklch: toOklch(c) };
+}
+
+const PAGE_CANVAS: RGBA = { r: 255, g: 255, b: 255, a: 1 };
+
+/** Background layers from the element out to the root. */
+export function backgroundLayersOf(t: InspectTarget): BackgroundLayer[] {
+  const layers: BackgroundLayer[] = [];
+  for (let node: InspectTarget | null = t, depth = 0; node && depth < 64; node = node.parent(), depth++) {
+    const image = node.style('background-image');
+    const opacity = parseFloat(node.style('opacity'));
+    layers.push({ color: parseColor(node.style('background-color')), image: Boolean(image) && image !== 'none', opacity: Number.isFinite(opacity) ? opacity : 1 });
+  }
+  return layers;
 }
 
 function colorBlocks(t: InspectTarget): PanelBlock[] {
   const color = parseColor(t.style('color'));
-  const bg = parseColor(t.style('background-color'));
+  const ownBg = parseColor(t.style('background-color'));
   const border = parseColor(t.style('border-top-color'));
+  const bg = effectiveBackground(backgroundLayersOf(t), PAGE_CANVAS);
+
   const colors: ColorEntry[] = [];
   if (color) colors.push(colorEntry('Text', color));
-  if (bg) colors.push(colorEntry('Background', bg));
-  if (border && border.a !== 0) colors.push(colorEntry('Border', border));
+  if (ownBg && ownBg.a >= 1) colors.push(colorEntry('Background', ownBg));
+  else if (bg.kind === 'solid') colors.push(colorEntry(ownBg && ownBg.a > 0 ? 'Background (blended)' : 'Background (behind)', bg.color));
+  if (border && border.a !== 0 && parsePx(t.style('border-top-width')) > 0) colors.push(colorEntry('Border', border));
+
   const blocks: PanelBlock[] = [{ kind: 'colors', colors }];
-  if (color && bg && bg.a !== 0) {
-    const ratio = contrastRatio(color, bg);
-    blocks.push({ kind: 'contrast', ratio, rating: wcagRating(ratio) });
+  if (color && bg.kind === 'solid') {
+    const { ratio } = textContrast(color, bg);
+    blocks.push({ kind: 'contrast', ratio, rating: wcagRating(ratio), levels: contrastLevels(ratio) });
+  } else if (bg.kind === 'manual') {
+    blocks.push({ kind: 'note', text: 'The background is an image or gradient. Press E for the eyedropper to sample it.' });
   }
   return blocks;
 }

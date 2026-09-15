@@ -58,13 +58,24 @@ function renderBlock(block: PanelBlock): string {
       return block.colors.map(c => `<div class="color-row">`
         + `<span class="swatch-lg"${styleAttr({ background: c.hex })}></span>`
         + `<div class="color-info"><div class="color-label">${escapeHtml(c.label)}</div>`
-        + [c.hex, c.rgb, c.hsl].map(v => `<div class="color-value copyable"${copyAttrs(v)}>${escapeHtml(v)}</div>`).join('')
+        + [c.hex, c.rgb, c.hsl, c.oklch].map(v => `<div class="color-value copyable"${copyAttrs(v)}>${escapeHtml(v)}</div>`).join('')
         + '</div></div>').join('');
     case 'contrast': {
       const cls = block.rating === 'Fail' ? 'fail' : block.rating === 'AAA' ? 'aaa' : 'aa';
+      const level = (ok: boolean, name: string) => `<span class="lvl ${ok ? 'pass' : 'miss'}">${name} ${ok ? '✓' : '✗'}</span>`;
+      const { normal, large } = block.levels;
       return `<div class="contrast"><span>Contrast: ${block.ratio.toFixed(2)}:1</span>`
-        + `<span class="badge ${cls}">${escapeHtml(block.rating)}</span></div>`;
+        + `<span class="badge ${cls}">${escapeHtml(block.rating)}</span></div>`
+        + `<div class="levels"><span class="lvl-label">Normal text</span>${level(normal.aa, 'AA')}${level(normal.aaa, 'AAA')}`
+        + `<span class="lvl-label">Large text</span>${level(large.aa, 'AA')}${level(large.aaa, 'AAA')}</div>`;
     }
+    case 'swatches':
+      return `<div class="category"><div class="cat-name">${escapeHtml(block.title)}</div><div class="sw-grid">`
+        + block.swatches.map(sw => `<button type="button" class="sw copyable" data-copy="${escapeHtml(sw.copy)}"`
+          + ` title="${escapeHtml(`${sw.label} · click to copy`)}" aria-label="${escapeHtml(sw.label)}">`
+          + `<span class="sw-chip"${styleAttr({ background: sw.color })}></span>`
+          + (sw.count !== undefined ? `<span class="sw-count">${sw.count}</span>` : '') + '</button>').join('')
+        + '</div></div>';
     case 'box': {
       const b = block.box;
       return '<div class="box-model">'

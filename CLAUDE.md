@@ -18,6 +18,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
 - **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
 - **utils/colors.ts** — Color parsing (hex, rgb, hsl, named, and the `oklch`/`oklab`/`lab`/`lch`/`color()` forms Chrome returns for modern CSS), compositing, hex/rgb/hsl/oklch output, WCAG contrast ratio and rating.
+- **utils/palette.ts** — Page palette: computed colours grouped by role (backgrounds, text, borders, SVG), counted, as CSS custom properties; recent-picks list.
+- **utils/color-panels.ts** — Panel models for the eyedropper result and the page palette.
 - **utils/contrast.ts** — Page-wide text contrast: effective background behind text (translucent layers composited, images and gradients flagged for a manual check), WCAG large-text rules, AA/AAA audit.
 - **utils/css.ts** — CSS property categorization (7 categories), default value detection, formatting.
 - **utils/fonts.ts** — Font stack parsing, weight naming, shorthand generation.
@@ -40,6 +42,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - Box model visualization with nested colored layers (margin/border/padding/content); WCAG contrast between text color and background; CSS properties organized by category with defaults hidden; font preview renders in the detected font.
 
 ## More tool notes
+- **Color Picker**: Hovering shows text, background and border colours in hex, rgb, hsl and oklch. The background is the effective one behind the element: transparent layers are walked out to the first opaque background, and translucent ones are blended. Contrast is shown with AA/AAA for normal and large text; an image or gradient background points to the eyedropper instead. Tool-bar actions: **Eyedropper (E)** uses the native `EyeDropper` API (no permission, secure pages) to sample any pixel, shows it in all formats with contrast on white and black, and keeps recent picks in `storage.local`. **Palette (P)** lists every distinct computed colour on the page by role with use counts; click a swatch to copy, or copy all as CSS custom properties.
+- **Tool actions**: A hover tool's `actions` appear in the on-page tool bar with single-key shortcuts (ignored while typing in a field). Panels that are not about an element (palette, eyedropper result) sit above the tool bar and stay pinned until the page is clicked.
 - **Screenshot**: Uses `browser.tabs.captureVisibleTab()`, auto-downloads as PNG
 - **Accessibility**: The content script walks the document and every open or closed shadow root. It measures the contrast of each visible text element against its effective background (disabled controls and visually hidden text are skipped; up to 4000 elements), and collects alt text, link/button names, form labels, positive tabindex, heading order and landmarks. Every finding keeps its elements in a registry, so the popup's Highlight buttons outline them on the page (Esc or 8 s clears). Issues carry a WCAG 2.2 reference, marked best practice where it is guidance rather than a failure.
 - **CSS Variables**: Extracts all `--` properties from page stylesheets (same-origin), groups by scope, color swatches for color values, click to copy

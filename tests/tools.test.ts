@@ -38,6 +38,20 @@ describe('TOOLS', () => {
   });
 });
 
+describe('tool actions', () => {
+  it('gives the Color Picker an eyedropper (E) and a page palette (P)', () => {
+    expect(getTool('color-picker').actions?.map(a => [a.id, a.key])).toEqual([['eyedropper', 'e'], ['palette', 'p']]);
+  });
+
+  it('uses single lower-case keys that do not clash within a tool or with Escape', () => {
+    for (const tool of TOOLS) {
+      const keys = (tool.actions ?? []).map(a => a.key);
+      expect(new Set(keys).size).toBe(keys.length);
+      for (const key of keys) expect(key).toMatch(/^[a-z]$/);
+    }
+  });
+});
+
 describe('tool lookup', () => {
   it('finds a tool by id', () => {
     expect(getTool('rulers').name).toBe('Rulers');

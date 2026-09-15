@@ -60,14 +60,22 @@ describe('renderPanelHtml', () => {
     expect(html).toContain('>… › body › main › section › div › span</div>');
   });
 
-  it('renders colors as copyable values and contrast with a rating class', () => {
+  it('renders colors as copyable values and contrast with a rating class and levels', () => {
     const html = renderPanelHtml(model([
-      { kind: 'colors', colors: [{ label: 'Text', hex: '#ffffff', rgb: 'rgb(255, 255, 255)', hsl: 'hsl(0, 0%, 100%)' }] },
-      { kind: 'contrast', ratio: 1.2345, rating: 'Fail' },
+      { kind: 'colors', colors: [{ label: 'Text', hex: '#ffffff', rgb: 'rgb(255, 255, 255)', hsl: 'hsl(0, 0%, 100%)', oklch: 'oklch(100% 0 0)' }] },
+      { kind: 'contrast', ratio: 3.2345, rating: 'AA Large', levels: { normal: { aa: false, aaa: false }, large: { aa: true, aaa: false } } },
     ]));
     expect(html).toContain('data-copy="#ffffff"');
     expect(html).toContain('data-copy="hsl(0, 0%, 100%)"');
-    expect(html).toContain('Contrast: 1.23:1');
+    expect(html).toContain('data-copy="oklch(100% 0 0)"');
+    expect(html).toContain('Contrast: 3.23:1');
+    expect(html).toContain('class="badge aa"');
+    expect(html).toContain('<span class="lvl-label">Normal text</span><span class="lvl miss">AA ✗</span><span class="lvl miss">AAA ✗</span>');
+    expect(html).toContain('<span class="lvl-label">Large text</span><span class="lvl pass">AA ✓</span><span class="lvl miss">AAA ✗</span>');
+  });
+
+  it('renders a failing contrast with the fail class', () => {
+    const html = renderPanelHtml(model([{ kind: 'contrast', ratio: 1.2, rating: 'Fail', levels: { normal: { aa: false, aaa: false }, large: { aa: false, aaa: false } } }]));
     expect(html).toContain('class="badge fail"');
   });
 
