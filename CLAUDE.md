@@ -1,15 +1,15 @@
 # DevTools Pro — Browser Extension
 
 ## What This Is
-All-in-one developer browser toolkit: CSS inspection, color picking, font detection, spacing visualization, element info, and page meta. Free tier with 6 tools, Pro tier with 6 more (screenshots, accessibility, CSS variables, rulers, grid overlay, page assets).
+All-in-one developer browser toolkit: CSS inspection, color picking, font detection, spacing visualization, element info, page meta, screenshots, accessibility, CSS variables, rulers, grid overlay, and page assets. All 12 tools are free.
 
 Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2) from one codebase.
 
 ## Architecture
 - **entrypoints/content.ts** — Content script injected on all pages. Provides inspector overlay and floating info panel. Supports multiple tool modes (CSS, color, font, spacing, element info). All injected elements use `dtp-` prefix.
 - **entrypoints/background.ts** — Service worker for tab capture, settings storage, tool state management.
-- **entrypoints/popup/** — Tool launcher dashboard. 3x4 grid of tool buttons, meta panel view, pro upsell. Dark/light theme.
-- **entrypoints/options/** — Settings page (theme, compact mode, license status).
+- **entrypoints/popup/** — Tool launcher dashboard. 3x4 grid of tool buttons, meta panel view. Dark/light theme.
+- **entrypoints/options/** — Settings page (theme, compact mode).
 - **utils/colors.ts** — Color parsing (hex, rgb, hsl, named), conversion, WCAG contrast ratio and rating.
 - **utils/css.ts** — CSS property categorization (7 categories), default value detection, formatting.
 - **utils/fonts.ts** — Font stack parsing, weight naming, shorthand generation.
@@ -40,10 +40,8 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **Page Assets**: Lists images, scripts, stylesheets, fonts used on the page
 
 ## Monetization
-- Free tier: 6 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta)
-- Pro tier: 6 tools (Screenshot, Accessibility, CSS Variables, Rulers, Grid Overlay, Page Assets)
-- Pricing: $60 one-time (via ExtensionPay — integrated, registered as `devtools-pro`)
-- Pro gating via `proUnlocked` flag in `browser.storage.local`
+- Free for everyone: all 12 tools (CSS Inspector, Color Picker, Font Detector, Spacing, Element Info, Page Meta, Screenshot, Accessibility, CSS Variables, Rulers, Grid Overlay, Page Assets). No payment code ships in the package.
+- Ruling (Ken, 2026-09-15): keep the whole extension free for now; a Pro tier may come later. Sunk cost — no hosting/server bills to recoup. If a paid tier is added, see brightbar-dev/org-work `RUNBOOK.md` § "Adding a paid tier later" for the checklist (ExtensionPay registration, re-adding `wxt-extpay`, CWS Payments toggle, etc.).
 
 ## Commands
 ```bash
@@ -60,9 +58,9 @@ npm run test:watch   # Watch mode
 ```bash
 npm test
 ```
-- 197 unit tests via Vitest + WXT testing plugin
-- 9 test files covering: colors (32), css (21), fonts (17), spacing (16), dom (19), tools (13), css-vars (22), assets (16), accessibility (21)
-- All pure utility logic, no browser API mocking needed
+- 171 unit tests via Vitest + WXT testing plugin
+- 10 test files covering: colors (32), css (21), fonts (17), spacing (16), dom (19), tools (4), css-vars (22), assets (16), accessibility (21), background (3)
+- Mostly pure utility logic; background.test.ts uses `wxt/testing/fake-browser` to exercise the message handlers
 
 ## Conventions
 - WXT framework with vanilla TypeScript (no UI framework)

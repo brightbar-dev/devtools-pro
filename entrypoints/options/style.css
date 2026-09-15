@@ -63,28 +63,3 @@ select {
 
 a { color: var(--dtp-primary); }
 
-.dtp-badge-free {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.dtp-badge-pro {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #fef3c7;
-  color: #92400e;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.dtp-license-status p {
-  margin-top: 8px;
-  color: var(--dtp-text-secondary);
-  font-size: 13px;
-}

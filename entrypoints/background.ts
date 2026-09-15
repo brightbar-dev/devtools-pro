@@ -1,9 +1,4 @@
-import { initBackground } from '@brightbar-dev/wxt-extpay/helpers';
-
 export default defineBackground(() => {
-  // ExtPay background setup — the module's content script handles payment relay
-  initBackground('devtools-pro');
-
   // Set defaults on install
   browser.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === 'install') {
@@ -16,8 +11,6 @@ export default defineBackground(() => {
   });
 
   // Handle messages from popup and content scripts
-  // Note: ExtPay operations are handled directly by popup/options via their own
-  // ExtPay instance (from createExtPay) to avoid listener conflicts
   browser.runtime.onMessage.addListener((msg, sender) => {
     if (msg.action === 'captureTab') {
       return browser.tabs.captureVisibleTab(undefined, { format: 'png' });

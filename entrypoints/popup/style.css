@@ -7,8 +7,6 @@
   --dtp-primary: #4f46e5;
   --dtp-primary-hover: #4338ca;
   --dtp-accent: #06b6d4;
-  --dtp-pro-bg: #fef3c7;
-  --dtp-pro-text: #92400e;
   --dtp-success: #10b981;
   --dtp-fail: #ef4444;
 }
@@ -21,8 +19,6 @@
   --dtp-text-secondary: #94a3b8;
   --dtp-primary: #818cf8;
   --dtp-primary-hover: #6366f1;
-  --dtp-pro-bg: #451a03;
-  --dtp-pro-text: #fbbf24;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -86,10 +82,6 @@ body {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--dtp-primary) 25%, transparent);
 }
 
-.dtp-tool-btn.dtp-pro {
-  opacity: 0.75;
-}
-
 .dtp-tool-icon {
   font-size: 18px;
   line-height: 1;
@@ -99,18 +91,6 @@ body {
   font-size: 10px;
   text-align: center;
   line-height: 1.2;
-}
-
-.dtp-pro-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  font-size: 8px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: var(--dtp-pro-bg);
-  color: var(--dtp-pro-text);
 }
 
 /* Meta panel */
@@ -179,66 +159,6 @@ body {
   padding: 20px;
   color: var(--dtp-text-secondary);
 }
-
-/* Pro upsell */
-.dtp-upsell {
-  text-align: center;
-  padding: 20px 10px;
-}
-
-.dtp-upsell h3 { margin-bottom: 8px; font-size: 16px; }
-.dtp-upsell p { margin-bottom: 16px; color: var(--dtp-text-secondary); font-size: 12px; }
-
-.dtp-buy-btn {
-  background: var(--dtp-primary);
-  color: white;
-  border: none;
-  padding: 10px 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.dtp-buy-btn:hover { background: var(--dtp-primary-hover); }
-
-.dtp-trial-btn {
-  display: block;
-  width: 100%;
-  background: transparent;
-  color: var(--dtp-primary);
-  border: 1px solid var(--dtp-primary);
-  padding: 8px 24px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  margin-bottom: 8px;
-}
-
-.dtp-trial-btn:hover { background: var(--dtp-surface); }
-
-.dtp-upsell .dtp-buy-btn {
-  display: block;
-  width: 100%;
-  margin-bottom: 8px;
-}
-
-.dtp-login-btn {
-  display: block;
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: var(--dtp-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 4px;
-}
-
-.dtp-login-btn:hover { color: var(--dtp-primary); text-decoration: underline; }
 
 /* Footer */
 .dtp-footer {
