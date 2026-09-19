@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.4.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.3.0...devtools-pro-v0.4.0) (2026-09-19)
+
+
+### Features
+
+* accessibility audit with page-wide contrast, WCAG references and highlight on page ([#15](https://github.com/brightbar-dev/devtools-pro/issues/15)) ([d567711](https://github.com/brightbar-dev/devtools-pro/commit/d56771168102ed2638bcc0814522ba6f806f6b0c))
+* color picker with effective-background contrast, oklch, eyedropper and page palette ([#16](https://github.com/brightbar-dev/devtools-pro/issues/16)) ([987c184](https://github.com/brightbar-dev/devtools-pro/commit/987c1846485bfc9007f32f99b5d382aab7f941cd))
+* CSS inspector shows where values come from and copies as CSS or Tailwind ([#18](https://github.com/brightbar-dev/devtools-pro/issues/18)) ([c47cec8](https://github.com/brightbar-dev/devtools-pro/commit/c47cec8ef8b40be9673587ef6b8a417eb1f55012))
+* draw measurements, grid and flex layout, and spacing on the page ([#17](https://github.com/brightbar-dev/devtools-pro/issues/17)) ([77260f6](https://github.com/brightbar-dev/devtools-pro/commit/77260f697d77331312f2ac62b1499506e1d6fd2b))
+* first-run page, SVG icons and keyboard navigation, rendered fonts, and panel fixes ([#21](https://github.com/brightbar-dev/devtools-pro/issues/21)) ([c02b965](https://github.com/brightbar-dev/devtools-pro/commit/c02b965f41e4946aac440c978fb74d6a9d774d2f))
+* full-page and element screenshots, saved and copied ([#19](https://github.com/brightbar-dev/devtools-pro/issues/19)) ([074bca2](https://github.com/brightbar-dev/devtools-pro/commit/074bca252c662cde1bc2327326b66291e17c1bdc))
+* live edit with undo for text, spacing, colours and font size ([#20](https://github.com/brightbar-dev/devtools-pro/issues/20)) ([90a0f39](https://github.com/brightbar-dev/devtools-pro/commit/90a0f396c70f000a52b94ef376e5609e2cfea648))
+* make every tool free — remove ExtensionPay and all Pro gating ([#13](https://github.com/brightbar-dev/devtools-pro/issues/13)) ([7b0e9f7](https://github.com/brightbar-dev/devtools-pro/commit/7b0e9f7898db263579ec04cef019707f5dba6acc))
+
+
+### Bug Fixes
+
+* drop the retired Tailwind CSS Lookup from the cross-promotion links ([#11](https://github.com/brightbar-dev/devtools-pro/issues/11)) ([f1bf279](https://github.com/brightbar-dev/devtools-pro/commit/f1bf2794a0bcafec9753f5c3288e4008941a1f24))
+* no stale tool bar after exiting a tool while a hint is showing ([#22](https://github.com/brightbar-dev/devtools-pro/issues/22)) ([df97244](https://github.com/brightbar-dev/devtools-pro/commit/df97244df8473bed3384217890460ad7736d6685))
+
+
+### Performance
+
+* inject the inspector on demand, isolate it in shadow DOM, and coalesce hover ([#14](https://github.com/brightbar-dev/devtools-pro/issues/14)) ([83dbb37](https://github.com/brightbar-dev/devtools-pro/commit/83dbb37fb14e0f3f52be9c65bd3746aa5c39c385))
+
 ## [0.3.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.2.0...devtools-pro-v0.3.0) (2026-09-14)
 
 
