@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.4.0...devtools-pro-v0.5.0) (2026-09-23)
+
+
+### Features
+
+* rename DevTools Pro to Brightbar DevTools ([#29](https://github.com/brightbar-dev/devtools-pro/issues/29)) ([d879a1c](https://github.com/brightbar-dev/devtools-pro/commit/d879a1cf3f172cad80c6fa7f194ac7a2a5387ebe))
+
 ## [0.4.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.3.0...devtools-pro-v0.4.0) (2026-09-19)
 
 
