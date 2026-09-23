@@ -1,4 +1,4 @@
-# DevTools Pro — Browser Extension
+# Brightbar DevTools — Browser Extension
 
 ## What This Is
 All-in-one developer browser toolkit: CSS inspection, color picking, font detection, spacing visualization, element info, page meta, screenshots, accessibility, CSS variables, rulers, grid overlay, and page assets. Plus Live Edit with undo. Every tool is free.

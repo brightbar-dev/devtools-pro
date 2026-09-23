@@ -276,7 +276,7 @@ export default defineContentScript({
           renderedFont: toolId === 'font-detect' ? renderedFamily(parseFontStack(window.getComputedStyle(el).fontFamily), fontAvailable) : undefined,
         });
       } catch (err) {
-        return { toolId, title: 'DevTools Pro', path: pathOf(el), blocks: [{ kind: 'note', text: `Could not inspect this element: ${(err as Error).message}` }] };
+        return { toolId, title: 'Brightbar DevTools', path: pathOf(el), blocks: [{ kind: 'note', text: `Could not inspect this element: ${(err as Error).message}` }] };
       }
     }
 
@@ -350,11 +350,11 @@ export default defineContentScript({
       const panel = document.createElement('div');
       panel.className = 'panel';
       panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'DevTools Pro inspector panel');
+      panel.setAttribute('aria-label', 'Brightbar DevTools inspector panel');
       const bar = document.createElement('div');
       bar.className = 'bar';
       bar.setAttribute('role', 'toolbar');
-      bar.setAttribute('aria-label', 'DevTools Pro tools');
+      bar.setAttribute('aria-label', 'Brightbar DevTools tools');
       const highlights = document.createElement('div');
       highlights.className = 'highlights';
       highlights.setAttribute('aria-hidden', 'true');
@@ -690,7 +690,7 @@ export default defineContentScript({
         + (tool?.actions ?? []).map(a => `<button type="button" class="tb-btn tb-action" data-action="${a.id}"`
           + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.label)}</button>`).join('')
         + `<span class="hint" aria-live="polite">${escapeHtml(status)}</span>`
-        + '<button type="button" class="tb-close" data-close aria-label="Close DevTools Pro (Esc)" title="Close (Esc)">✕</button>';
+        + '<button type="button" class="tb-close" data-close aria-label="Close Brightbar DevTools (Esc)" title="Close (Esc)">✕</button>';
     }
 
     function flashHint(text: string, ms = 1200) {

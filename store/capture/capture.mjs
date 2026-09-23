@@ -189,7 +189,7 @@ function band(caption) {
   return `<div style="height:72px;display:flex;align-items:center;gap:16px;padding:0 28px;background:linear-gradient(90deg,#1e1b4b,#3730a3);color:#fff">
     <img src="/work/icon.png" width="36" height="36" style="border-radius:8px">
     <div style="font-size:26px;font-weight:650;letter-spacing:-0.3px">${caption}</div>
-    <div style="margin-left:auto;font-size:15px;color:#c7d2fe">DevTools Pro · every tool free</div>
+    <div style="margin-left:auto;font-size:15px;color:#c7d2fe">Brightbar DevTools · every tool free</div>
   </div>`;
 }
 async function compose(name, caption, pageShot, popup) {
@@ -308,7 +308,7 @@ async function tile(name, width, height, body) {
 
 await tile('promo-small-440x280', 440, 280, `
   <div style="box-sizing:border-box;height:100%;padding:30px 32px;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 60%,#0f766e 100%);color:#fff">
-    <div style="display:flex;align-items:center;gap:12px"><img src="/work/icon.png" width="46" height="46" style="border-radius:11px"><div style="font-size:30px;font-weight:700;letter-spacing:-0.4px">DevTools Pro</div></div>
+    <div style="display:flex;align-items:center;gap:12px"><img src="/work/icon.png" width="46" height="46" style="border-radius:11px"><div style="font-size:30px;font-weight:700;letter-spacing:-0.4px">Brightbar DevTools</div></div>
     <div style="margin-top:14px;font-size:18px;line-height:1.35;color:#e0e7ff">CSS inspector, eyedropper, page ruler, grid overlay and accessibility checker</div>
     <div style="margin-top:16px;display:flex;gap:10px;color:#a5b4fc">${icons.slice(0, 9).join('')}</div>
     <div style="margin-top:14px;font-size:14px;font-weight:700;color:#6ee7b7">13 tools · every one free</div>
@@ -317,7 +317,7 @@ await tile('promo-small-440x280', 440, 280, `
 await tile('promo-marquee-1400x560', 1400, 560, `
   <div style="box-sizing:border-box;height:100%;display:flex;align-items:center;gap:48px;padding:0 64px;background:radial-gradient(circle at 80% 20%,#4338ca 0%,#1e1b4b 55%,#0b1020 100%);color:#fff">
     <div style="flex:0 0 470px">
-      <div style="display:flex;align-items:center;gap:14px"><img src="/work/icon.png" width="56" height="56" style="border-radius:13px"><div style="font-size:40px;font-weight:700;letter-spacing:-0.6px">DevTools Pro</div></div>
+      <div style="display:flex;align-items:center;gap:14px"><img src="/work/icon.png" width="56" height="56" style="border-radius:13px"><div style="font-size:40px;font-weight:700;letter-spacing:-0.6px">Brightbar DevTools</div></div>
       <div style="margin-top:18px;font-size:30px;line-height:1.2;font-weight:650">Every page-inspection tool.<br>Every one free.</div>
       <div style="margin-top:16px;font-size:17px;line-height:1.5;color:#c7d2fe">No warning to install: it only touches the page you click it on.</div>
       <div style="margin-top:22px;display:flex;flex-wrap:wrap;gap:8px">
