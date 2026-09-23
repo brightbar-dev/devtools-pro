@@ -1,4 +1,4 @@
-/** Tool definitions for DevTools Pro. Every tool is available to everyone. */
+/** Tool definitions for Brightbar DevTools. Every tool is available to everyone. */
 
 /**
  * How a tool runs:

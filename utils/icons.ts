@@ -1,6 +1,6 @@
 /**
  * Tool icons as inline SVG: 24×24, stroked in `currentColor`, so they follow the theme and
- * render the same on every OS (emoji do not). Drawn for DevTools Pro.
+ * render the same on every OS (emoji do not). Drawn for Brightbar DevTools.
  */
 
 const svg = (body: string) =>

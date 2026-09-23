@@ -39,7 +39,7 @@ function storePage(ctx: RestrictionContext): Restriction {
 function fileAccess(): Restriction {
   return {
     kind: 'file-access',
-    message: 'To inspect local files, turn on "Allow access to file URLs" for DevTools Pro on the extensions page, then reload the file.',
+    message: 'To inspect local files, turn on "Allow access to file URLs" for Brightbar DevTools on the extensions page, then reload the file.',
   };
 }
 
@@ -73,7 +73,7 @@ export function restrictionForError(error: unknown, ctx: RestrictionContext): Re
   if (/cannot access contents|missing host permission|must request permission|permission denied/i.test(message)) {
     return {
       kind: 'no-access',
-      message: 'DevTools Pro can only reach this tab after you open it from the toolbar on this tab. Click the DevTools Pro icon here and pick the tool again.',
+      message: 'Brightbar DevTools can only reach this tab after you open it from the toolbar on this tab. Click the Brightbar DevTools icon here and pick the tool again.',
     };
   }
   return { kind: 'unknown', message: `Could not start on this page: ${message || 'unknown error'}` };

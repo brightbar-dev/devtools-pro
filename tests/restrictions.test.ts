@@ -46,7 +46,7 @@ describe('restrictionForError', () => {
   it('explains a missing activeTab grant', () => {
     const r = restrictionForError(new Error('Cannot access contents of the page. Extension manifest must request permission to access the respective host.'), chrome);
     expect(r.kind).toBe('no-access');
-    expect(r.message).toMatch(/Click the DevTools Pro icon/);
+    expect(r.message).toMatch(/Click the Brightbar DevTools icon/);
     expect(restrictionForError(new Error('Missing host permission for the tab'), firefox).kind).toBe('no-access');
   });
 
