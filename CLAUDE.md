@@ -26,6 +26,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
 - **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
+- **utils/review-nudge.ts** — The one-time store review request (`@brightbar-dev/review-nudge`, private on GitHub Packages; `.npmrc` + `NODE_AUTH_TOKEN` in CI). `recordToolUse()` runs where a tool succeeds (hover tool started, page panel rendered, screenshot saved); the popup mounts the request above its footer only when no hover tool is running. The package owns the thresholds and the once-only rule. Never in the Firefox build.
 - **utils/colors.ts** — Color parsing (hex, rgb, hsl, named, and the `oklch`/`oklab`/`lab`/`lch`/`color()` forms Chrome returns for modern CSS), compositing, hex/rgb/hsl/oklch output, WCAG contrast ratio and rating.
 - **utils/palette.ts** — Page palette: computed colours grouped by role (backgrounds, text, borders, SVG), counted, as CSS custom properties; recent-picks list.
 - **utils/color-panels.ts** — Panel models for the eyedropper result and the page palette.
