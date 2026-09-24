@@ -532,3 +532,4 @@ body {
   margin-top: 10px;
 }
 .dtp-review-nudge:empty { display: none; }
+.dtp-review-nudge .bb-review-nudge-dismiss { opacity: 1; } /* the package dims it to 70%, which drops muted text below 4.5:1 */
