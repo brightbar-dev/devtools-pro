@@ -521,3 +521,14 @@ body {
   color: var(--dtp-text-secondary);
   font-size: 10px;
 }
+
+/* The one-time review request (utils/review-nudge.ts); the slot is empty unless it is showing. */
+.dtp-review-nudge {
+  --bb-nudge-padding: 8px 0 0;
+  --bb-nudge-font-size: 11px;
+  --bb-nudge-color: var(--dtp-text-secondary);
+  --bb-nudge-link: var(--dtp-primary);
+  --bb-nudge-border: var(--dtp-border);
+  margin-top: 10px;
+}
+.dtp-review-nudge:empty { display: none; }

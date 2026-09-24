@@ -8,6 +8,7 @@ import { escapeHtml } from '@/utils/dom';
 import { restrictionForError, restrictionForUrl, type Restriction, type RestrictionContext } from '@/utils/restrictions';
 import type { CollectKind, InspectorMessage, InspectorReply } from '@/utils/messages';
 import { dataUrlBytes, screenshotFilename } from '@/utils/capture';
+import { recordToolUse, showReviewNudge } from '@/utils/review-nudge';
 
 /** The inspector bundle, injected on demand; it is not a manifest content script. */
 const INSPECTOR_FILE = '/content-scripts/content.js';
@@ -54,6 +55,8 @@ async function init() {
   // Arrow keys work straight away: focus the active tool, or the first.
   const start = toolsGrid.querySelector<HTMLButtonElement>('.dtp-tool-btn.dtp-active') ?? toolsGrid.querySelector<HTMLButtonElement>('.dtp-tool-btn');
   if (toolsGrid.style.display !== 'none') start?.focus();
+  // The review request waits for a popup opened between tasks, never while a hover tool is running.
+  if (activeTool === null) await showReviewNudge(document.getElementById('review-nudge')!);
 }
 
 /** The browser withholds the URL of pages we may not touch; a no-op injection tells us why. */
@@ -245,6 +248,7 @@ async function startHoverTool(tool: Tool, tabId: number, hint?: string) {
   }
   activeTool = tool.id;
   updateActiveState();
+  await recordToolUse(); // before the popup closes itself
 }
 
 async function collect<T>(tabId: number, what: CollectKind): Promise<T> {
@@ -257,12 +261,13 @@ async function collect<T>(tabId: number, what: CollectKind): Promise<T> {
 async function showPageTool(tool: Tool, tabId: number) {
   panelTabId = tabId;
   switch (tool.id) {
-    case 'meta-tags': return showMetaPanel(tabId);
-    case 'css-vars': return showCssVarsPanel(tabId);
-    case 'accessibility': return showAccessibilityPanel(tabId);
-    case 'assets': return showAssetsPanel(tabId);
+    case 'meta-tags': await showMetaPanel(tabId); break;
+    case 'css-vars': await showCssVarsPanel(tabId); break;
+    case 'accessibility': await showAccessibilityPanel(tabId); break;
+    case 'assets': await showAssetsPanel(tabId); break;
     default: throw new Error(`Tool id "${tool.id}" has no popup panel`);
   }
+  await recordToolUse();
 }
 
 function updateActiveState() {
@@ -522,6 +527,7 @@ async function runScreenshot(kind: string) {
     } else if (kind === 'page') {
       await inject(tab.id, false);
       await browser.tabs.sendMessage(tab.id, { action: 'dtp:capture-page' } satisfies InspectorMessage, { frameId: 0 });
+      await recordToolUse();
       window.close(); // the page does the scrolling and saving
     } else if (kind === 'element') {
       await startHoverTool(getTool('element-info'), tab.id, 'Hover an element and press S to capture it');
@@ -566,6 +572,7 @@ async function captureVisible(tabUrl: string | undefined) {
     <img src="${result}" alt="Screenshot of the visible page" style="width:100%;border-radius:4px;margin:8px 0;">
     <div class="dtp-empty">Saved ${escapeHtml(name)}${copied ? ' and copied to the clipboard' : ''}</div>
   </div>`;
+  await recordToolUse();
 }
 
 init().catch(err => console.error('Popup init failed:', err));
