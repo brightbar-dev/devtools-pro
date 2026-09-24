@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.5.0...devtools-pro-v0.6.0) (2026-09-24)
+
+
+### Features
+
+* ask for a store review once, after real use, with a separate link for problems ([#33](https://github.com/brightbar-dev/devtools-pro/issues/33)) ([08d5f54](https://github.com/brightbar-dev/devtools-pro/commit/08d5f540b276c37b08f9fa87370b13f4d47be3ee))
+
 ## [0.5.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.4.0...devtools-pro-v0.5.0) (2026-09-23)
 
 
