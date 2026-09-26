@@ -26,7 +26,7 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - **utils/geometry.ts** — Rects, frame offsets, and panel placement that never covers the hovered element.
 - **utils/schedule.ts** — Coalesces events to one run per animation frame.
 - **utils/restrictions.ts** — Whether the browser allows extensions on a page, from its URL or the injection error.
-- **utils/review-nudge.ts** — The one-time store review request (`@brightbar-dev/review-nudge`, private on GitHub Packages; `.npmrc` + `NODE_AUTH_TOKEN` in CI). `recordToolUse()` runs where a tool succeeds (hover tool started, page panel rendered, screenshot saved); the popup mounts the request above its footer only when no hover tool is running. The package owns the thresholds and the once-only rule. Never in the Firefox build.
+- **utils/review-nudge.ts** — The one-time store review request (`@brightbar-dev/review-nudge`, private on GitHub Packages; `.npmrc` + `NODE_AUTH_TOKEN` in CI, a proxy-injected credential in cloud sessions — see Installing). `recordToolUse()` runs where a tool succeeds (hover tool started, page panel rendered, screenshot saved); the popup mounts the request above its footer only when no hover tool is running. The package owns the thresholds and the once-only rule. Never in the Firefox build.
 - **utils/colors.ts** — Color parsing (hex, rgb, hsl, named, and the `oklch`/`oklab`/`lab`/`lch`/`color()` forms Chrome returns for modern CSS), compositing, hex/rgb/hsl/oklch output, WCAG contrast ratio and rating.
 - **utils/palette.ts** — Page palette: computed colours grouped by role (backgrounds, text, borders, SVG), counted, as CSS custom properties; recent-picks list.
 - **utils/color-panels.ts** — Panel models for the eyedropper result and the page palette.
@@ -80,6 +80,11 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 - `store/cws.json` holds the listing text, single purpose and permission justifications; keep the justifications in step with `wxt.config.ts`.
 - `store/screenshots/` (five 1280×800) and `store/promo/` (440×280, 1400×560) are PNGs without alpha, captured from the real built extension on a fictional demo page (`store/capture/demo/`, never a real brand's site).
 - Regenerate after UI changes: `npx wxt build`, then `PLAYWRIGHT=<path to playwright index.mjs> CHROME=<Chrome for Testing binary> node store/capture/capture.mjs`. It needs ImageMagick (`magick`) to flatten alpha. Uploading to the Web Store dashboard is a manual step.
+
+## Installing
+- **`npm ci` only.** `package-lock.json` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `npm install <pkg>` or `npm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
+- `.npmrc` sends only the `@brightbar-dev` scope to `npm.pkg.github.com`; everything else comes from the public npm registry.
+- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `npm ci` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
 
 ## Commands
 ```bash
