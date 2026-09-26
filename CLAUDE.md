@@ -79,30 +79,30 @@ Built with [WXT](https://wxt.dev/) — builds for Chrome (MV3) and Firefox (MV2)
 ## Store listing
 - `store/cws.json` holds the listing text, single purpose and permission justifications; keep the justifications in step with `wxt.config.ts`.
 - `store/screenshots/` (five 1280×800) and `store/promo/` (440×280, 1400×560) are PNGs without alpha, captured from the real built extension on a fictional demo page (`store/capture/demo/`, never a real brand's site).
-- Regenerate after UI changes: `npx wxt build`, then `PLAYWRIGHT=<path to playwright index.mjs> CHROME=<Chrome for Testing binary> node store/capture/capture.mjs`. It needs ImageMagick (`magick`) to flatten alpha. Uploading to the Web Store dashboard is a manual step.
+- Regenerate after UI changes: `pnpm exec wxt build`, then `PLAYWRIGHT=<path to playwright index.mjs> CHROME=<Chrome for Testing binary> node store/capture/capture.mjs`. It needs ImageMagick (`magick`) to flatten alpha. Uploading to the Web Store dashboard is a manual step.
 
 ## Installing
-- **`npm ci` only.** `package-lock.json` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `npm install <pkg>` or `npm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
+- **`pnpm install --frozen-lockfile` only.** `pnpm-lock.yaml` pins every version and integrity hash; `@brightbar-dev/review-nudge` is pinned exactly (`0.1.0`) in `package.json` too. Never `pnpm add <pkg>` or `pnpm update` a `@brightbar-dev/*` package: moving it is a deliberate PR that changes `package.json` and the lock together.
 - `.npmrc` sends only the `@brightbar-dev` scope to `npm.pkg.github.com`; everything else comes from the public npm registry.
-- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `npm ci` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
+- **Claude cloud sessions:** `.claude/hooks/cloud-install.sh` runs `pnpm install --frozen-lockfile` + `wxt prepare` at session start (`CLAUDE_CODE_REMOTE=true` only; locally it does nothing). The GitHub Packages token is an API credential the cloud environment's proxy attaches to `npm.pkg.github.com` requests. It is never in a file or an environment variable, so do not add an `_authToken` line to `.npmrc`.
 
 ## Commands
 ```bash
-npm run dev          # Dev mode with HMR (Chrome)
-npm run dev:firefox  # Dev mode (Firefox)
-npm run build        # Production build (Chrome)
-npm run build:firefox # Production build (Firefox)
-npm run zip          # Build + zip for store submission
-npm run test         # Run Vitest tests
-npm run test:watch   # Watch mode
+pnpm run dev          # Dev mode with HMR (Chrome)
+pnpm run dev:firefox  # Dev mode (Firefox)
+pnpm run build        # Production build (Chrome)
+pnpm run build:firefox # Production build (Firefox)
+pnpm run zip          # Build + zip for store submission
+pnpm run test         # Run Vitest tests
+pnpm run test:watch   # Watch mode
 ```
 
 ## Testing
 ```bash
-npm test            # Vitest unit tests
-npx tsc --noEmit    # type check (CI runs it too)
+pnpm test                # Vitest unit tests
+pnpm exec tsc --noEmit   # type check (CI runs it too)
 ```
-- Logic lives in `utils/` and is tested in Node without a DOM (run `npm test` for the current count). `background.test.ts` uses `wxt/testing/fake-browser` to exercise the message handlers and the frame relay.
+- Logic lives in `utils/` and is tested in Node without a DOM (run `pnpm test` for the current count). `background.test.ts` uses `wxt/testing/fake-browser` to exercise the message handlers and the frame relay.
 - The content script and popup are verified by hand in Chrome for Testing for each PR; the PR body records what was checked and the before/after evidence. Chrome's `Extensions.triggerAction` (CDP, with `--enable-unsafe-extension-debugging`) clicks the toolbar icon for real, so the `activeTab` grant can be exercised headless. Verify install warnings with `chrome.management.getPermissionWarningsByManifest` from any extension page.
 
 ## Conventions
