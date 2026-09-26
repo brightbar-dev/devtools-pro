@@ -66,9 +66,9 @@ function hue(value: string | undefined): number {
   if (value === undefined) return NaN;
   if (value === 'none') return 0;
   const n = parseFloat(value);
+  if (value.endsWith('grad')) return n * 0.9;
   if (value.endsWith('rad')) return (n * 180) / Math.PI;
   if (value.endsWith('turn')) return n * 360;
-  if (value.endsWith('grad')) return n * 0.9;
   return n;
 }
 
