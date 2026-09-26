@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.6.0...devtools-pro-v0.6.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **colors:** read oklch and lch hues given in grad correctly instead of as radians ([#37](https://github.com/brightbar-dev/devtools-pro/issues/37)) ([4a74ad4](https://github.com/brightbar-dev/devtools-pro/commit/4a74ad4b9cbe78e788f776b2df60567a86509e2e))
+
 ## [0.6.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.5.0...devtools-pro-v0.6.0) (2026-09-24)
 
 
