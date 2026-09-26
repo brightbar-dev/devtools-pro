@@ -65,12 +65,8 @@ describe('the other syntaxes computed styles and authored values use', () => {
     expect(parseColor('oklch(0.6 0.2 0.5turn)')).toEqual(degrees);
   });
 
-  // BUG: hue() in utils/colors.ts tests `value.endsWith('rad')` before `endsWith('grad')`, and
-  // "200grad" ends with "rad", so gradians are read as radians (200 rad ≈ 259°) and the grad
-  // branch is unreachable. oklch(0.6 0.2 200grad) comes out purple rgb(147, 91, 228) instead of
-  // the teal rgb(0, 163, 133) that 180° gives. Current callers pass computed styles, which Chrome
-  // serialises in degrees, so this is latent rather than visible today.
-  it.skip('reads oklch and lch hues in grad the same as degrees', () => {
+  // Guards hue units: 'grad' must not be read as 'rad' (both end in "rad").
+  it('reads oklch and lch hues in grad the same as degrees', () => {
     expect(parseColor('oklch(0.6 0.2 200grad)')).toEqual(parseColor('oklch(0.6 0.2 180)'));
     expect(parseColor('lch(50 40 200grad)')).toEqual(parseColor('lch(50 40 180)'));
   });
