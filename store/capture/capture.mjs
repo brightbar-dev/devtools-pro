@@ -1,6 +1,6 @@
 // Chrome Web Store assets from the real built extension: five 1280×800 screenshots and two promo tiles.
 //
-//   npx wxt build
+//   pnpm exec wxt build
 //   PLAYWRIGHT=/path/to/node_modules/playwright/index.mjs \
 //   CHROME="/path/to/Google Chrome for Testing" \
 //   node store/capture/capture.mjs
@@ -23,7 +23,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT ?? 'playwright');
 const CHROME = process.env.CHROME;
 if (!CHROME) throw new Error('Set CHROME to a Chrome for Testing binary');
 const EXT = path.join(repo, '.output/chrome-mv3');
-if (!fs.existsSync(path.join(EXT, 'manifest.json'))) throw new Error('Run `npx wxt build` first');
+if (!fs.existsSync(path.join(EXT, 'manifest.json'))) throw new Error('Run `pnpm exec wxt build` first');
 const OUT = { shots: path.join(repo, 'store/screenshots'), promo: path.join(repo, 'store/promo') };
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'dtp-store-'));
 const PORT = 9800 + Math.floor(Math.random() * 100);
