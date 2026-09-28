@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.6.1...devtools-pro-v0.6.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **deps:** review-nudge 0.1.1, so the nudge shows only once when two pages open together ([#41](https://github.com/brightbar-dev/devtools-pro/issues/41)) ([75efa40](https://github.com/brightbar-dev/devtools-pro/commit/75efa40328266c2fc7bcd7c146664004ce225e08))
+
 ## [0.6.1](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.6.0...devtools-pro-v0.6.1) (2026-09-26)
 
 
