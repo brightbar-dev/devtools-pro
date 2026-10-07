@@ -61,6 +61,7 @@ export const TOOLS: Tool[] = [
     id: 'rulers', name: 'Measure', shortName: 'Measure', icon: '📏', kind: 'hover',
     description: 'Sizes on hover; click to anchor, hold Alt for distances, drag for a ruler',
     hint: 'Click to anchor · Alt for distances · drag to measure',
+    actions: [{ id: 'unit', label: 'Unit', key: 'u', description: 'Cycle the unit: px, rem, em, pt, cm, mm, in' }],
   },
   {
     id: 'grid-overlay', name: 'Grid Overlay', shortName: 'Grid', icon: '▦', kind: 'hover',

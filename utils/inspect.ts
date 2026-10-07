@@ -13,6 +13,7 @@ import { parsePx, type BoxModel, type BoxSides } from './spacing';
 import { elementSelector, formatDimensions, textPreview, type PathSegment } from './dom';
 import { getHoverTool, UnknownToolError } from './tools';
 import { distanceGuides, formatLength } from './measure';
+import { formatUnit, unitBasis, type LengthUnit, type UnitContext } from './units';
 import type { EditFormState } from './edit-form';
 import type { Rect, Size } from './geometry';
 
@@ -82,8 +83,10 @@ export interface BuildContext {
   anchor?: Rect;
   /** Winning authored declarations for the element, by property (CSS Inspector). */
   authored?: Record<string, AuthoredValue>;
-  /** Root font size in px, for rem values (Font Detector). */
+  /** Root font size in px, for rem values (Font Detector, Measure). */
   rootFontSize?: number;
+  /** The unit the Measure tool shows lengths in. */
+  unit?: LengthUnit;
   /** The family the browser renders for this element (Font Detector). */
   renderedFont?: string;
 }
@@ -107,7 +110,7 @@ function blocksFor(toolId: string, t: InspectTarget, ctx: BuildContext): PanelBl
     case 'font-detect': return fontBlocks(t, ctx);
     case 'spacing': return spacingBlocks(t);
     case 'element-info': return elementBlocks(t);
-    case 'rulers': return rulerBlocks(t, ctx.viewport, ctx.anchor);
+    case 'rulers': return rulerBlocks(t, ctx.viewport, ctx.anchor, ctx.unit ?? 'px', ctx.rootFontSize);
     case 'grid-overlay': return gridBlocks(t);
     case 'live-edit': return liveEditBlocks(t);
     default: throw new UnknownToolError(toolId, 'has no panel builder');
@@ -288,8 +291,11 @@ export function siblingGap(el: Rect, sibling: Rect): string {
   return 'overlapping';
 }
 
-function rulerBlocks(t: InspectTarget, viewport: Size, anchor?: Rect): PanelBlock[] {
+function rulerBlocks(t: InspectTarget, viewport: Size, anchor: Rect | undefined, unit: LengthUnit, rootFontSize = 16): PanelBlock[] {
   const r = t.rect;
+  const units: UnitContext = { rootFontSize, fontSize: parsePx(t.style('font-size')) || rootFontSize };
+  // Pixels stay whole numbers, as they always were; other units keep the decimals that make them useful.
+  const px = (n: number) => (unit === 'px' ? `${Math.round(n)}px` : formatUnit(n, unit, units));
   const blocks: PanelBlock[] = [{
     kind: 'rows',
     rows: [
@@ -332,10 +338,12 @@ function rulerBlocks(t: InspectTarget, viewport: Size, anchor?: Rect): PanelBloc
       kind: 'rows',
       title: 'To anchor',
       rows: guides.length > 0
-        ? guides.map(g => row(g.axis === 'x' ? 'Horizontal' : 'Vertical', formatLength(g.length)))
+        ? guides.map(g => row(g.axis === 'x' ? 'Horizontal' : 'Vertical', formatLength(g.length, unit, units)))
         : [row('Distance', 'Same box as the anchor')],
     });
   }
+  const basis = unitBasis(unit, units);
+  if (basis) blocks.push({ kind: 'note', text: basis });
   return blocks;
 }
 
