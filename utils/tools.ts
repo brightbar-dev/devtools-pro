@@ -40,10 +40,11 @@ export const TOOLS: Tool[] = [
   },
   {
     id: 'color-picker', name: 'Color Picker', shortName: 'Color', icon: '🎨', kind: 'hover',
-    description: 'Hover colours with AA/AAA contrast, eyedropper any pixel, page palette',
+    description: 'Hover colours with AA/AAA contrast, eyedropper any pixel, page palette, gradient generator',
     actions: [
       { id: 'eyedropper', label: 'Eyedropper', key: 'e', description: 'Pick any pixel on the screen' },
       { id: 'palette', label: 'Palette', key: 'p', description: 'Every colour used on this page' },
+      { id: 'gradient', label: 'Gradient', key: 'g', description: 'Build a linear or radial gradient and copy it as CSS or Tailwind' },
     ],
   },
   {
@@ -61,6 +62,7 @@ export const TOOLS: Tool[] = [
     id: 'rulers', name: 'Measure', shortName: 'Measure', icon: '📏', kind: 'hover',
     description: 'Sizes on hover; click to anchor, hold Alt for distances, drag for a ruler',
     hint: 'Click to anchor · Alt for distances · drag to measure',
+    actions: [{ id: 'unit', label: 'Unit', key: 'u', description: 'Cycle the unit: px, rem, em, pt, cm, mm, in' }],
   },
   {
     id: 'grid-overlay', name: 'Grid Overlay', shortName: 'Grid', icon: '▦', kind: 'hover',

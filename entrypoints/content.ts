@@ -14,7 +14,8 @@ import { parseColor, type RGBA } from '@/utils/colors';
 import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/utils/contrast';
 import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
 import { addRecentColor, buildPalette, type ColorUse } from '@/utils/palette';
-import { paletteModel, pickedColorModel } from '@/utils/color-panels';
+import { gradientModel, paletteModel, pickedColorModel } from '@/utils/color-panels';
+import { mountGradientEditor } from '@/utils/gradient-editor';
 import { boxModelOf, type AuthoredValue } from '@/utils/inspect';
 import { compareSpecificity, sheetLabel, shorthandCandidates, specificity, splitSelectorList, winningDeclarations, type AuthoredDeclaration, type Specificity } from '@/utils/cascade';
 import { nonDefaultDeclarations } from '@/utils/css';
@@ -27,7 +28,8 @@ import {
   RECENT_STORAGE_KEY, buildCommands, isPaletteShortcut, moveSelection, rankCommands, recordRecent, sanitizeRecent,
   type Command, type RankedCommand,
 } from '@/utils/commands';
-import { distanceGuides, formatLength, isDrag, rulerRect } from '@/utils/measure';
+import { distanceGuides, formatLength, formatSize, isDrag, rulerRect } from '@/utils/measure';
+import { nextUnit, unitFrom, type LengthUnit, type UnitContext } from '@/utils/units';
 import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
 import {
   FRAME_PROTOCOL, parseFrameMessage,
@@ -92,6 +94,9 @@ export default defineContentScript({
     let ui: Ui | null = null;
     let hint = '';
     let compact = false;
+    let unit: LengthUnit = 'px';
+    /** Font size of the element a ruler drag started on, for em. */
+    let dragFontSize = 0;
     // Measure and Grid Overlay state (render root only)
     let anchorEl: Element | null = null;
     let altHeld = false;
@@ -277,6 +282,16 @@ export default defineContentScript({
       };
     }
 
+    function rootFontSize(): number {
+      return parsePx(window.getComputedStyle(document.documentElement).fontSize) || 16;
+    }
+
+    /** The font sizes em and rem are measured against for a label about `el` (or the ruler drag). */
+    function unitContext(el: Element | null): UnitContext {
+      const root = rootFontSize();
+      return { rootFontSize: root, fontSize: (el ? parsePx(window.getComputedStyle(el).fontSize) : dragFontSize) || root };
+    }
+
     function modelFor(el: Element, toolId: string): PanelModel {
       try {
         const anchor = toolId === 'rulers' && anchorEl?.isConnected && anchorEl !== el ? toRect(anchorEl.getBoundingClientRect()) : undefined;
@@ -285,7 +300,8 @@ export default defineContentScript({
           path: pathOf(el),
           anchor,
           authored: toolId === 'css-inspect' ? authoredFor(el) : undefined,
-          rootFontSize: parsePx(window.getComputedStyle(document.documentElement).fontSize) || 16,
+          rootFontSize: rootFontSize(),
+          unit,
           renderedFont: toolId === 'font-detect' ? renderedFamily(parseFontStack(window.getComputedStyle(el).fontFamily), fontAvailable) : undefined,
         });
       } catch (err) {
@@ -469,6 +485,7 @@ export default defineContentScript({
         try {
           ui.panel.innerHTML = renderPanelHtml(shown.model);
           applyStyles(ui.panel);
+          mountGradient(shown.model);
         } catch {
           ui.panel.textContent = 'Could not render this element.';
         }
@@ -603,28 +620,31 @@ export default defineContentScript({
     }
 
     function drawMeasure(el: Element | null, d: Drawing) {
+      let units = unitContext(el);
       const sizeLabel = (r: Rect, cls: string) =>
-        d.label(`${Number(r.width.toFixed(1))} × ${Number(r.height.toFixed(1))}`, r.left, r.top >= 22 ? r.top - 20 : r.top + r.height + 4, `dw-size ${cls}`);
+        d.label(formatSize(r.width, r.height, unit, units), r.left, r.top >= 22 ? r.top - 20 : r.top + r.height + 4, `dw-size ${cls}`);
       const anchor = anchorEl?.isConnected ? toRect(anchorEl.getBoundingClientRect()) : null;
       if (anchor) {
         d.box('dw-anchor', anchor);
+        units = unitContext(anchorEl);
         sizeLabel(anchor, 'dw-anchor-label');
       }
       if (el && el !== anchorEl) {
         const r = toRect(el.getBoundingClientRect());
+        units = unitContext(el);
         sizeLabel(r, '');
         if (anchor && altHeld) {
           for (const g of distanceGuides(anchor, r)) {
             d.box(g.axis === 'x' ? 'dw-guide' : 'dw-guide', g.axis === 'x'
               ? { left: g.x1, top: g.y1, width: g.length, height: 1 }
               : { left: g.x1, top: g.y1, width: 1, height: g.length });
-            d.label(formatLength(g.length), (g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2, 'center dw-guide-label');
+            d.label(formatLength(g.length, unit, units), (g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2, 'center dw-guide-label');
           }
         }
       }
       if (ruler) {
         d.box('dw-ruler', ruler);
-        d.label(`${Math.round(ruler.width)} × ${Math.round(ruler.height)}`, ruler.left + ruler.width / 2, ruler.top + ruler.height / 2, 'center dw-ruler-label');
+        d.label(formatSize(ruler.width, ruler.height, unit, unitContext(null)), ruler.left + ruler.width / 2, ruler.top + ruler.height / 2, 'center dw-ruler-label');
       }
     }
 
@@ -660,6 +680,8 @@ export default defineContentScript({
       if (ui && e.composedPath().includes(ui.host)) return;
       e.preventDefault(); // no text selection while measuring
       dragStart = { left: e.clientX, top: e.clientY };
+      const under = deepElementFromPoint(e.clientX, e.clientY);
+      dragFontSize = under ? parsePx(window.getComputedStyle(under).fontSize) : 0;
     }
 
     function onMouseUp(e: MouseEvent) {
@@ -668,7 +690,7 @@ export default defineContentScript({
       if (isDrag(dragStart, end)) {
         ruler = rulerRect(dragStart, end);
         suppressClick = true;
-        flashHint(`${Math.round(ruler.width)} × ${Math.round(ruler.height)} · click to clear`);
+        flashHint(`${formatSize(ruler.width, ruler.height, unit, unitContext(null))} · click to clear`);
         draw();
       }
       dragStart = null;
@@ -705,7 +727,7 @@ export default defineContentScript({
         + '<span class="sep" aria-hidden="true"></span>'
         + '<button type="button" class="tb-btn tb-action" data-action="capture-element" title="Screenshot the hovered element (S)" aria-keyshortcuts="S">Capture</button>'
         + (tool?.actions ?? []).map(a => `<button type="button" class="tb-btn tb-action" data-action="${a.id}"`
-          + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.label)}</button>`).join('')
+          + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.id === 'unit' ? `Unit: ${unit}` : a.label)}</button>`).join('')
         + '<button type="button" class="tb-btn tb-action" data-action="open-palette" title="Command palette (/)" aria-keyshortcuts="/" aria-haspopup="dialog">Commands</button>'
         + `<span class="hint" aria-live="polite">${escapeHtml(status)}</span>`
         + '<button type="button" class="tb-close" data-close aria-label="Close Brightbar DevTools (Esc)" title="Close (Esc)">✕</button>';
@@ -1059,11 +1081,13 @@ export default defineContentScript({
       if (!renderHere || !activeTool) return;
       if (id === 'eyedropper') await pickPixel();
       else if (id === 'palette') showPalette();
+      else if (id === 'gradient') await showGradient();
       else if (id === 'copy-css') await copyStyles('css');
       else if (id === 'copy-tailwind') await copyStyles('tailwind');
       else if (id === 'capture-element') await captureElementAction();
       else if (id === 'fonts') showFontInventory();
       else if (id === 'open-palette') openPalette();
+      else if (id === 'unit') await setUnit(nextUnit(unit));
       else flashHint(`Unknown action "${id}"`);
     }
 
@@ -1526,6 +1550,48 @@ export default defineContentScript({
       draw();
     }
 
+    /** Open the gradient generator, seeded with the recent picks. */
+    async function showGradient() {
+      let recent: string[] = [];
+      try {
+        const stored = await browser.storage.local.get('recentColors');
+        if (Array.isArray(stored.recentColors)) recent = (stored.recentColors as unknown[]).filter((c): c is string => typeof c === 'string');
+      } catch {
+        // no history: the editor starts from its default colours
+      }
+      showStatic(gradientModel(recent));
+    }
+
+    function mountGradient(model: PanelModel) {
+      const block = model.blocks.find(b => b.kind === 'gradient');
+      const host = ui?.panel.querySelector<HTMLElement>('[data-dtp-gradient]');
+      if (!block || block.kind !== 'gradient' || !host) return;
+      mountGradientEditor(host, {
+        recent: block.recent,
+        copy: copyText,
+        pick: sampleColor,
+      });
+    }
+
+    /** Sample one pixel with the native eyedropper and remember it; null when unavailable or cancelled. */
+    async function sampleColor(): Promise<{ hex: string; recent: string[] } | null> {
+      const EyeDropperCtor = (window as Window & { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper;
+      if (typeof EyeDropperCtor !== 'function') return null;
+      if (ui) {
+        // Keep our own panel out of the sample.
+        ui.overlay.style.display = 'none';
+        ui.panel.style.display = 'none';
+      }
+      try {
+        const { sRGBHex } = await new EyeDropperCtor().open();
+        return { hex: sRGBHex, recent: await rememberColor(sRGBHex) };
+      } catch {
+        return null; // cancelled with Esc
+      } finally {
+        draw();
+      }
+    }
+
     async function rememberColor(hex: string): Promise<string[]> {
       try {
         const stored = await browser.storage.local.get('recentColors');
@@ -1709,6 +1775,7 @@ export default defineContentScript({
         attachUi();
         renderBar();
         void loadCompact();
+        void loadUnit();
       }
       if (pointer) hoverFrame.schedule();
     }
@@ -1721,6 +1788,35 @@ export default defineContentScript({
         recentCommands = sanitizeRecent(stored[RECENT_STORAGE_KEY], buildCommands(activeTool));
       } catch {
         setCompact(false);
+      }
+    }
+
+    async function loadUnit() {
+      try {
+        const { measureUnit } = await browser.storage.local.get('measureUnit');
+        applyUnit(unitFrom(measureUnit));
+      } catch {
+        applyUnit('px');
+      }
+    }
+
+    /** Show lengths in `next`; rebuild the panel and the drawn labels. */
+    function applyUnit(next: LengthUnit) {
+      if (unit === next) return;
+      unit = next;
+      hovered = null; // the panel is rebuilt for the same element in the new unit
+      hoverFrame.schedule();
+      renderBar();
+      draw();
+    }
+
+    async function setUnit(next: LengthUnit) {
+      applyUnit(next);
+      flashHint(`Unit: ${next}`);
+      try {
+        await browser.storage.local.set({ measureUnit: next });
+      } catch {
+        // the unit still applies to this page; it just is not remembered
       }
     }
 
@@ -1739,6 +1835,7 @@ export default defineContentScript({
       if (area === 'local' && RECENT_STORAGE_KEY in changes) {
         recentCommands = sanitizeRecent(changes[RECENT_STORAGE_KEY]?.newValue, buildCommands(activeTool));
       }
+      if (area === 'local' && 'measureUnit' in changes) applyUnit(unitFrom(changes.measureUnit?.newValue));
     }
 
     function deactivate() {
