@@ -24,6 +24,10 @@ import { toTailwind } from '@/utils/tailwind';
 import { CAPTURE_INTERVAL_MS, MAX_CAPTURE_HEIGHT, captureTiles, dataUrlBytes, deviceCrop, screenshotFilename, type CaptureKind } from '@/utils/capture';
 import { changesAsCss, emptyHistory, netChanges, recordEdit, redo, resetEdits, TEXT_PROP, undo, type Edit } from '@/utils/edits';
 import { SIDES, editValue, toColorInput, type EditFormState } from '@/utils/edit-form';
+import {
+  RECENT_STORAGE_KEY, buildCommands, isPaletteShortcut, moveSelection, rankCommands, recordRecent, sanitizeRecent,
+  type Command, type RankedCommand,
+} from '@/utils/commands';
 import { distanceGuides, formatLength, formatSize, isDrag, rulerRect } from '@/utils/measure';
 import { nextUnit, unitFrom, type LengthUnit, type UnitContext } from '@/utils/units';
 import { boxRegions, flexGaps, gridOverlay, parseTrackList } from '@/utils/overlay-geometry';
@@ -43,6 +47,7 @@ interface Ui {
   highlights: HTMLDivElement;
   drawings: HTMLDivElement;
   toast: HTMLDivElement;
+  palette: HTMLDivElement;
 }
 
 type Shown =
@@ -105,6 +110,14 @@ export default defineContentScript({
     let editTarget: Element | null = null;
     let editGesture = 0;
     let hintTimer: number | undefined;
+    // Command palette state (render root only)
+    let paletteOpen = false;
+    let paletteIndex = 0;
+    let paletteCommands: Command[] = [];
+    let paletteRanked: RankedCommand[] = [];
+    let recentCommands: string[] = [];
+    let paletteTheme = 'auto';
+    let paletteReturnFocus: Element | null = null;
     const frameCache = new WeakMap<object, FrameElement>();
 
     const raf = (cb: () => void) => window.requestAnimationFrame(cb);
@@ -311,7 +324,7 @@ export default defineContentScript({
     }
 
     function processHover() {
-      if (!activeTool || !pointer || pinned) return;
+      if (!activeTool || !pointer || pinned || paletteOpen) return;
       const el = deepElementFromPoint(pointer.x, pointer.y);
       if (!el) return;
       if (el === hovered) {
@@ -380,12 +393,15 @@ export default defineContentScript({
       const toast = document.createElement('div');
       toast.className = 'toast';
       toast.setAttribute('role', 'status');
-      root.append(drawings, highlights, overlay, panel, bar, toast);
+      const palette = document.createElement('div');
+      palette.className = 'pal-backdrop';
+      palette.hidden = true;
+      root.append(drawings, highlights, overlay, panel, bar, toast, palette);
       root.addEventListener('click', onUiClick);
       root.addEventListener('input', onUiInput);
       root.addEventListener('focusin', onUiGestureStart);
       root.addEventListener('pointerdown', onUiGestureStart);
-      return { host, root, overlay, panel, bar, highlights, drawings, toast };
+      return { host, root, overlay, panel, bar, highlights, drawings, toast, palette };
     }
 
     function attachUi() {
@@ -417,6 +433,7 @@ export default defineContentScript({
 
     function detachUi() {
       if (!ui) return;
+      closePalette(false);
       ui.host.remove();
       ui.overlay.style.display = 'none';
       ui.panel.style.display = 'none';
@@ -711,6 +728,7 @@ export default defineContentScript({
         + '<button type="button" class="tb-btn tb-action" data-action="capture-element" title="Screenshot the hovered element (S)" aria-keyshortcuts="S">Capture</button>'
         + (tool?.actions ?? []).map(a => `<button type="button" class="tb-btn tb-action" data-action="${a.id}"`
           + ` title="${escapeHtml(`${a.description} (${a.key.toUpperCase()})`)}" aria-keyshortcuts="${a.key.toUpperCase()}">${escapeHtml(a.id === 'unit' ? `Unit: ${unit}` : a.label)}</button>`).join('')
+        + '<button type="button" class="tb-btn tb-action" data-action="open-palette" title="Command palette (/)" aria-keyshortcuts="/" aria-haspopup="dialog">Commands</button>'
         + `<span class="hint" aria-live="polite">${escapeHtml(status)}</span>`
         + '<button type="button" class="tb-close" data-close aria-label="Close Brightbar DevTools (Esc)" title="Close (Esc)">✕</button>';
     }
@@ -765,6 +783,16 @@ export default defineContentScript({
         });
         return;
       }
+      if (target.closest('[data-pal-close]')) {
+        closePalette(true);
+        return;
+      }
+      const palOption = target.closest<HTMLElement>('[data-pal-index]');
+      if (palOption) {
+        paletteIndex = Number(palOption.dataset.palIndex);
+        void runPaletteSelection();
+        return;
+      }
       const actionBtn = target.closest<HTMLElement>('[data-action]');
       if (actionBtn?.dataset.action) {
         void runAction(actionBtn.dataset.action);
@@ -777,6 +805,181 @@ export default defineContentScript({
         return;
       }
       if (target.closest('[data-close]')) exitEverywhere();
+    }
+
+
+    // ── Command palette (render root) ───────────────────────────────────────
+
+    function setPaletteTheme(value: unknown) {
+      paletteTheme = value === 'light' || value === 'dark' ? value : 'auto';
+      ui?.palette.setAttribute('data-theme', paletteTheme);
+    }
+
+    function paletteParts() {
+      const root = ui?.palette;
+      return {
+        input: root?.querySelector<HTMLInputElement>('.pal-input') ?? null,
+        list: root?.querySelector<HTMLElement>('.pal-list') ?? null,
+        status: root?.querySelector<HTMLElement>('.pal-status') ?? null,
+      };
+    }
+
+    function openPalette() {
+      if (!renderHere || !activeTool || paletteOpen) return;
+      attachUi();
+      if (!ui) return;
+      paletteOpen = true;
+      paletteReturnFocus = document.activeElement;
+      paletteCommands = buildCommands(activeTool);
+      paletteIndex = 0;
+      ui.palette.setAttribute('data-theme', paletteTheme);
+      ui.palette.innerHTML = '<div class="pal-scrim" data-pal-close></div>'
+        + '<div class="pal" role="dialog" aria-modal="true" aria-label="Command palette">'
+        + '<input class="pal-input" type="text" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list"'
+        + ' aria-activedescendant="" aria-label="Search commands" placeholder="Type a command" autocomplete="off" autocapitalize="off" spellcheck="false">'
+        + '<ul class="pal-list" id="pal-list" role="listbox" aria-label="Commands"></ul>'
+        + '<div class="pal-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></div>'
+        + '<div class="pal-status" role="status" aria-live="polite"></div></div>';
+      const { input, list } = paletteParts();
+      const pal = ui.palette.querySelector<HTMLElement>('.pal');
+      // Keep the page from seeing what is typed here: these run after the field has handled it.
+      pal?.addEventListener('keydown', onPaletteKeyDown);
+      pal?.addEventListener('keyup', e => e.stopPropagation());
+      pal?.addEventListener('keypress', e => e.stopPropagation());
+      input?.addEventListener('input', e => {
+        e.stopPropagation();
+        paletteIndex = 0;
+        renderPalette();
+      });
+      // Keep the field focused while the list is clicked.
+      list?.addEventListener('mousedown', e => e.preventDefault());
+      list?.addEventListener('mousemove', e => {
+        const row = (e.target as Element | null)?.closest<HTMLElement>('[data-pal-index]');
+        const index = row ? Number(row.dataset.palIndex) : paletteIndex;
+        if (index !== paletteIndex) selectPaletteRow(index, false);
+      });
+      ui.palette.hidden = false;
+      renderPalette();
+      input?.focus({ preventScroll: true });
+      void browser.storage.local.get(RECENT_STORAGE_KEY).then(stored => {
+        if (!paletteOpen) return;
+        recentCommands = sanitizeRecent(stored[RECENT_STORAGE_KEY], paletteCommands);
+        if (!paletteParts().input?.value) renderPalette();
+      }, () => {});
+    }
+
+    function closePalette(restoreFocus: boolean) {
+      if (!paletteOpen) return;
+      paletteOpen = false;
+      if (ui) {
+        ui.palette.hidden = true;
+        ui.palette.replaceChildren();
+      }
+      const back = paletteReturnFocus;
+      paletteReturnFocus = null;
+      if (restoreFocus && back instanceof HTMLElement && back.isConnected && back !== ui?.host) {
+        try {
+          back.focus({ preventScroll: true });
+        } catch {
+          // the element cannot take focus any more
+        }
+      }
+    }
+
+    function renderPalette() {
+      const { input, list, status } = paletteParts();
+      if (!input || !list || !status) return;
+      paletteRanked = rankCommands(paletteCommands, input.value, recentCommands);
+      paletteIndex = Math.min(paletteIndex, Math.max(0, paletteRanked.length - 1));
+      const typing = input.value.trim() !== '';
+      let html = '';
+      let heading = '';
+      paletteRanked.forEach((item, i) => {
+        const c = item.command;
+        const group = item.recent ? 'Recent' : c.group;
+        if (!typing && group !== heading) {
+          heading = group;
+          html += `<li class="pal-group" role="presentation" aria-hidden="true">${escapeHtml(group)}</li>`;
+        }
+        const title = Array.from(c.title).map((ch, k) => (item.indices.includes(k) ? `<mark>${escapeHtml(ch)}</mark>` : escapeHtml(ch))).join('');
+        html += `<li class="pal-opt" id="pal-opt-${i}" role="option" data-pal-index="${i}" aria-selected="${i === paletteIndex}"`
+          + ` aria-label="${escapeHtml(`${c.title}${c.active ? ' (active)' : ''}. ${c.detail}`)}"`
+          + `${c.shortcut ? ` aria-keyshortcuts="${escapeHtml(c.shortcut)}"` : ''}>`
+          + `<span class="pal-main"><span class="pal-title" aria-hidden="true">${title}${c.active ? '<span class="pal-badge">active</span>' : ''}</span>`
+          + `<span class="pal-detail" aria-hidden="true">${escapeHtml(c.detail)}</span></span>`
+          + (c.shortcut ? `<kbd class="pal-key" aria-hidden="true">${escapeHtml(c.shortcut)}</kbd>` : '')
+          + '</li>';
+      });
+      list.innerHTML = html || '<li class="pal-empty" role="presentation">No command matches</li>';
+      status.textContent = paletteRanked.length ? `${paletteRanked.length} command${paletteRanked.length === 1 ? '' : 's'}` : 'No commands match';
+      selectPaletteRow(paletteIndex, true);
+    }
+
+    function selectPaletteRow(index: number, scroll: boolean) {
+      const { input, list } = paletteParts();
+      if (!input || !list) return;
+      paletteIndex = index;
+      for (const row of list.querySelectorAll<HTMLElement>('.pal-opt')) {
+        row.setAttribute('aria-selected', String(Number(row.dataset.palIndex) === index));
+      }
+      const row = list.querySelector<HTMLElement>(`#pal-opt-${index}`);
+      input.setAttribute('aria-activedescendant', row?.id ?? '');
+      if (scroll) row?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function onPaletteKeyDown(e: KeyboardEvent) {
+      e.stopPropagation();
+      if (e.isComposing) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closePalette(true);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        void runPaletteSelection();
+      } else if (e.key === 'Tab') {
+        e.preventDefault(); // the palette is modal: focus stays in the field
+      } else if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(e.key)
+        || ((e.key === 'n' || e.key === 'p') && e.ctrlKey && !e.metaKey && !e.altKey)) {
+        e.preventDefault();
+        const key = e.key === 'n' ? 'ArrowDown' : e.key === 'p' ? 'ArrowUp' : e.key;
+        selectPaletteRow(moveSelection(paletteIndex, paletteRanked.length, key), true);
+      }
+    }
+
+    async function runPaletteSelection() {
+      const item = paletteRanked[paletteIndex];
+      if (!item) return;
+      const command = item.command;
+      closePalette(true);
+      recentCommands = recordRecent(recentCommands, command.id);
+      browser.storage.local.set({ [RECENT_STORAGE_KEY]: recentCommands }).catch(() => {});
+      await runCommand(command);
+    }
+
+    async function runCommand(command: Command) {
+      const run = command.run;
+      switch (run.type) {
+        case 'tool':
+          broadcast({ action: 'dtp:activate', toolId: run.toolId });
+          activate(run.toolId);
+          break;
+        case 'action':
+          if (run.toolId && run.toolId !== activeTool) {
+            broadcast({ action: 'dtp:activate', toolId: run.toolId });
+            activate(run.toolId);
+          }
+          await runAction(run.actionId);
+          break;
+        case 'capture-page':
+          await capturePageAction();
+          break;
+        case 'exit':
+          exitEverywhere();
+          break;
+        case 'popup':
+          flashHint(`${findTool(run.toolId)?.name ?? 'This tool'} opens from the toolbar icon`, 3000);
+          break;
+      }
     }
 
     // ── Activation ──────────────────────────────────────────────────────────
@@ -819,6 +1022,23 @@ export default defineContentScript({
     }
 
     function onKeyDown(e: KeyboardEvent) {
+      if (paletteOpen) {
+        // Keys typed in the palette's own field are handled there. If something took the focus
+        // away, Esc still closes the palette rather than the tool.
+        if (e.key === 'Escape' && !(ui && e.composedPath().includes(ui.host))) {
+          e.preventDefault();
+          e.stopPropagation();
+          closePalette(true);
+        }
+        return;
+      }
+      if (isPaletteShortcut(e, isEditable(e.composedPath()[0]) || Boolean(ui && e.composedPath().includes(ui.host)))) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (renderHere) openPalette();
+        else broadcast({ action: 'dtp:palette' });
+        return;
+      }
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
@@ -866,6 +1086,7 @@ export default defineContentScript({
       else if (id === 'copy-tailwind') await copyStyles('tailwind');
       else if (id === 'capture-element') await captureElementAction();
       else if (id === 'fonts') showFontInventory();
+      else if (id === 'open-palette') openPalette();
       else if (id === 'unit') await setUnit(nextUnit(unit));
       else flashHint(`Unknown action "${id}"`);
     }
@@ -1561,8 +1782,10 @@ export default defineContentScript({
 
     async function loadCompact() {
       try {
-        const { compactMode } = await browser.storage.local.get('compactMode');
-        setCompact(Boolean(compactMode));
+        const stored = await browser.storage.local.get(['compactMode', 'theme', RECENT_STORAGE_KEY]);
+        setCompact(Boolean(stored.compactMode));
+        setPaletteTheme(stored.theme);
+        recentCommands = sanitizeRecent(stored[RECENT_STORAGE_KEY], buildCommands(activeTool));
       } catch {
         setCompact(false);
       }
@@ -1608,11 +1831,16 @@ export default defineContentScript({
 
     function onStorageChanged(changes: Record<string, { newValue?: unknown }>, area: string) {
       if (area === 'local' && 'compactMode' in changes) setCompact(Boolean(changes.compactMode?.newValue));
+      if (area === 'local' && 'theme' in changes) setPaletteTheme(changes.theme?.newValue);
+      if (area === 'local' && RECENT_STORAGE_KEY in changes) {
+        recentCommands = sanitizeRecent(changes[RECENT_STORAGE_KEY]?.newValue, buildCommands(activeTool));
+      }
       if (area === 'local' && 'measureUnit' in changes) applyUnit(unitFrom(changes.measureUnit?.newValue));
     }
 
     function deactivate() {
       if (activeTool === null) return;
+      closePalette(false);
       activeTool = null;
       hovered = null;
       pinned = false;
@@ -1962,6 +2190,9 @@ export default defineContentScript({
           return false;
         case 'dtp:pin':
           if (activeTool) setPinned(message.pinned);
+          return false;
+        case 'dtp:palette':
+          if (activeTool && renderHere) openPalette();
           return false;
         case 'dtp:state':
           if (isTop) sendResponse({ ok: true, activeTool } satisfies InspectorReply);
