@@ -591,6 +591,324 @@
 .tb-close { color: #fca5a5; }
 .tb-close:hover { background: rgba(248, 113, 113, 0.18); color: #fecaca; }
 
+/* Command palette: a modal list over the page. Colours are variables so dark, light and the
+   Settings "auto" (follows the system) share one set of rules. */
+.pal-backdrop {
+  --pal-bg: #1e1e2e;
+  --pal-fg: #e2e8f0;
+  --pal-muted: #a8b3c7;
+  --pal-border: #3b3b5c;
+  --pal-sel-bg: #312e81;
+  --pal-sel-fg: #ffffff;
+  --pal-sel-muted: #c7d2fe;
+  --pal-key-bg: #2a2a40;
+  --pal-key-fg: #c7d2fe;
+  --pal-accent: #a5b4fc;
+  --pal-badge-bg: #064e3b;
+  --pal-badge-fg: #a7f3d0;
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.pal-backdrop[hidden] { display: none; }
+
+.pal-backdrop[data-theme='light'] {
+  --pal-bg: #ffffff;
+  --pal-fg: #1e1e2e;
+  --pal-muted: #475569;
+  --pal-border: #c7cbd6;
+  --pal-sel-bg: #e0e7ff;
+  --pal-sel-fg: #1e1b4b;
+  --pal-sel-muted: #312e81;
+  --pal-key-bg: #eef2ff;
+  --pal-key-fg: #3730a3;
+  --pal-accent: #3730a3;
+  --pal-badge-bg: #d1fae5;
+  --pal-badge-fg: #065f46;
+}
+
+@media (prefers-color-scheme: light) {
+  .pal-backdrop:not([data-theme='dark']):not([data-theme='light']) {
+    --pal-bg: #ffffff;
+    --pal-fg: #1e1e2e;
+    --pal-muted: #475569;
+    --pal-border: #c7cbd6;
+    --pal-sel-bg: #e0e7ff;
+    --pal-sel-fg: #1e1b4b;
+    --pal-sel-muted: #312e81;
+    --pal-key-bg: #eef2ff;
+    --pal-key-fg: #3730a3;
+    --pal-accent: #3730a3;
+    --pal-badge-bg: #d1fae5;
+    --pal-badge-fg: #065f46;
+  }
+}
+
+.pal-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.pal {
+  position: absolute;
+  top: min(14vh, 120px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(580px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - min(14vh, 120px) - 16px);
+  background: var(--pal-bg);
+  color: var(--pal-fg);
+  border: 1px solid var(--pal-border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  text-align: left;
+}
+
+.pal-input {
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--pal-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--pal-fg);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.pal-input::placeholder { color: var(--pal-muted); opacity: 1; }
+.pal:focus-within { border-color: var(--pal-accent); }
+
+.pal-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pal-group {
+  padding: 8px 10px 3px;
+  color: var(--pal-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pal-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pal-opt[aria-selected='true'] {
+  background: var(--pal-sel-bg);
+  color: var(--pal-sel-fg);
+  border-left-color: var(--pal-accent);
+}
+
+.pal-main { display: flex; flex-direction: column; min-width: 0; }
+.pal-title { font-weight: 600; }
+
+.pal-detail {
+  color: var(--pal-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pal-opt[aria-selected='true'] .pal-detail { color: var(--pal-sel-muted); }
+
+.pal mark {
+  background: transparent;
+  color: var(--pal-accent);
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.pal-opt[aria-selected='true'] mark { color: inherit; }
+
+.pal-badge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--pal-badge-bg);
+  color: var(--pal-badge-fg);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pal-key, .pal-foot kbd {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--pal-border);
+  border-radius: 4px;
+  background: var(--pal-key-bg);
+  color: var(--pal-key-fg);
+  font: 600 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.pal-empty { padding: 14px 10px; color: var(--pal-muted); }
+
+.pal-foot {
+  display: flex;
+  gap: 14px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--pal-border);
+  color: var(--pal-muted);
+  font-size: 11px;
+}
+
+.pal-foot kbd { margin-right: 3px; }
+
+/* The live region is for screen readers only. */
+.pal-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .pal-opt[aria-selected='true'] { outline: 2px solid Highlight; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Gradient generator. */
+.gradient-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 300px;
+  padding: 4px 2px 2px;
+}
+
+.gr-preview {
+  height: 72px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+}
+
+.gr-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.gr-type { display: flex; align-items: center; gap: 10px; margin: 0; padding: 0; border: 0; }
+.gr-type legend { float: left; margin-right: 8px; padding: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #94a3b8; }
+.gr-radio { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.gr-angle { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 150px; }
+.gr-angle label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #94a3b8; }
+.gr-angle input[type="range"] { flex: 1; min-width: 60px; accent-color: #818cf8; }
+.gr-unit { font-size: 11px; color: #94a3b8; }
+
+/* The stop bar leaves room above and below for the handles. */
+.gr-bar {
+  position: relative;
+  height: 20px;
+  margin: 8px 10px 14px;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  cursor: copy;
+}
+
+.gr-handle {
+  position: absolute;
+  top: 100%;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  box-sizing: border-box;
+  border: 2px solid #f8fafc;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  box-shadow: 0 0 0 1px #0f172a, 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.gr-handle.selected { border-color: #a5b4fc; box-shadow: 0 0 0 2px #4f46e5, 0 1px 4px rgba(0, 0, 0, 0.5); }
+.gr-handle:active { cursor: grabbing; }
+
+.gr-stops { display: flex; flex-direction: column; gap: 4px; }
+
+.gr-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.gr-stop.selected { border-color: #4f46e5; background: rgba(79, 70, 229, 0.15); }
+
+.gr-stop input[type="color"] {
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  background: #0f172a;
+  cursor: pointer;
+}
+
+.gradient-editor input[type="number"],
+.gradient-editor select {
+  box-sizing: border-box;
+  width: 62px;
+  min-width: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.gradient-editor select { width: auto; }
+
+.gradient-editor button {
+  appearance: none;
+  border: 1px solid #3b3b5c;
+  border-radius: 5px;
+  background: #2a2a40;
+  color: #e2e8f0;
+  padding: 4px 8px;
+  font: 11px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+}
+
+.gradient-editor button:hover:not(:disabled) { background: #3b3b5c; }
+.gradient-editor button:disabled { opacity: 0.45; cursor: default; }
+.gr-stop button { margin-left: auto; padding: 3px 7px; }
+
+.gradient-editor input:focus-visible,
+.gradient-editor select:focus-visible,
+.gradient-editor button:focus-visible,
+.gr-handle:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
+
+.gr-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.gr-recent { display: flex; flex-wrap: wrap; gap: 4px; }
+.gr-recent .gr-sw { width: 24px; height: 24px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 4px; }
+.gr-note { margin: 0; font-size: 10px; color: #94a3b8; }
+.gr-code { white-space: pre-wrap; word-break: break-all; cursor: text; user-select: text; }
+.gr-status { min-height: 14px; font-size: 10px; color: #a7f3d0; }

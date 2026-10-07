@@ -2,7 +2,7 @@
   "name": "devtools-pro",
   "description": "All-in-one developer browser toolkit — CSS inspection, element debugging, font/color detection, screenshot capture, and more.",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "type": "module",
   "packageManager": "pnpm@12.6.0",
   "scripts": {

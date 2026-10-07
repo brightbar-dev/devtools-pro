@@ -1,6 +1,7 @@
 /** Measurement geometry: distance guides between two boxes and a dragged ruler. */
 
 import type { Point, Rect } from './geometry';
+import { formatUnit, type LengthUnit, type UnitContext } from './units';
 
 export interface Guide {
   x1: number;
@@ -15,9 +16,21 @@ export interface Guide {
 const right = (r: Rect) => r.left + r.width;
 const bottom = (r: Rect) => r.top + r.height;
 
-/** A length for a label: whole pixels, or one decimal when the value is fractional. */
-export function formatLength(px: number): string {
-  return `${Number(Math.abs(px).toFixed(1))}px`;
+/** A length for a label: pixels (one decimal when fractional) or another unit. Distances carry no sign. */
+export function formatLength(px: number, unit: LengthUnit = 'px', ctx?: UnitContext): string {
+  return formatUnit(Math.abs(px), unit, ctx);
+}
+
+/**
+ * A size label such as "120 × 48" (pixels, as drawn before units existed) or "3.18 × 1.27cm":
+ * one unit suffix for the pair.
+ */
+export function formatSize(width: number, height: number, unit: LengthUnit = 'px', ctx?: UnitContext): string {
+  const [w, h] = [formatUnit(width, unit, ctx), formatUnit(height, unit, ctx)];
+  const bare = (text: string) => (text.endsWith('px') ? text.slice(0, -2) : text.replace(/[a-z]+$/, ''));
+  const suffix = h.replace(/^-?[\d.]+/, '');
+  // A relative unit that could not be computed falls back to px for both; the suffix is then "px".
+  return unit === 'px' ? `${bare(w)} × ${bare(h)}` : `${bare(w)} × ${bare(h)}${suffix}`;
 }
 
 function horizontal(xa: number, xb: number, y: number): Guide {

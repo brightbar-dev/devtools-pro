@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.6.2...devtools-pro-v0.7.0) (2026-10-07)
+
+
+### Features
+
+* command palette ([#48](https://github.com/brightbar-dev/devtools-pro/issues/48)) ([b815dd6](https://github.com/brightbar-dev/devtools-pro/commit/b815dd624baa5b55bde32d21e89d043f8661af7f))
+* measurement units and a CSS gradient generator ([#47](https://github.com/brightbar-dev/devtools-pro/issues/47)) ([fc56641](https://github.com/brightbar-dev/devtools-pro/commit/fc566411d32aa6584bd91ea6049f9ce69770c55a))
+
 ## [0.6.2](https://github.com/brightbar-dev/devtools-pro/compare/devtools-pro-v0.6.1...devtools-pro-v0.6.2) (2026-09-28)
 
 

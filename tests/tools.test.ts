@@ -39,8 +39,12 @@ describe('TOOLS', () => {
 });
 
 describe('tool actions', () => {
-  it('gives the Color Picker an eyedropper (E) and a page palette (P)', () => {
-    expect(getTool('color-picker').actions?.map(a => [a.id, a.key])).toEqual([['eyedropper', 'e'], ['palette', 'p']]);
+  it('gives the Color Picker an eyedropper (E), a page palette (P) and a gradient generator (G)', () => {
+    expect(getTool('color-picker').actions?.map(a => [a.id, a.key])).toEqual([['eyedropper', 'e'], ['palette', 'p'], ['gradient', 'g']]);
+  });
+
+  it('gives Measure a unit cycle (U)', () => {
+    expect(getTool('rulers').actions?.map(a => [a.id, a.key])).toEqual([['unit', 'u']]);
   });
 
   it('gives the Font Detector a page font inventory (I)', () => {

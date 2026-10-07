@@ -10,6 +10,7 @@ export type InspectorMessage =
   | { action: 'dtp:capture-page' }
   | { action: 'dtp:deactivate' }
   | { action: 'dtp:pin'; pinned: boolean }
+  | { action: 'dtp:palette' }
   | { action: 'dtp:state' }
   | { action: 'dtp:collect'; what: CollectKind }
   | { action: 'dtp:highlight'; ids: number[] };
@@ -28,9 +29,9 @@ export interface BroadcastRequest {
   message: InspectorMessage;
 }
 
-const RELAYABLE_ACTIONS = new Set(['dtp:activate', 'dtp:deactivate', 'dtp:pin']);
+const RELAYABLE_ACTIONS = new Set(['dtp:activate', 'dtp:deactivate', 'dtp:pin', 'dtp:palette']);
 
-/** Only tool switching, exit and pinning may be relayed; collectors and state queries may not. */
+/** Only tool switching, exit, pinning and opening the palette may be relayed; collectors and state queries may not. */
 export function isRelayable(message: unknown): message is InspectorMessage {
   if (typeof message !== 'object' || message === null) return false;
   return RELAYABLE_ACTIONS.has(String((message as { action?: unknown }).action));

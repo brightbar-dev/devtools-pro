@@ -63,3 +63,9 @@ select {
 
 a { color: var(--dtp-primary); }
 
+
+.dtp-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dtp-text-secondary);
+}

@@ -93,6 +93,8 @@ function renderBlock(block: PanelBlock): string {
       return `<div class="note">${escapeHtml(block.text)}</div>`;
     case 'edit-form':
       return editFormHtml(block.state);
+    case 'gradient':
+      return '<div class="gradient-host" data-dtp-gradient></div>';
     case 'code':
       return `<pre class="code copyable"${copyAttrs(block.text)}>${escapeHtml(block.text)}</pre>`;
   }
