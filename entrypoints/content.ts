@@ -14,7 +14,8 @@ import { parseColor, type RGBA } from '@/utils/colors';
 import { auditTextContrast, type BackgroundLayer, type TextSample } from '@/utils/contrast';
 import { analyzeHeadings, type AccessibilityData, type HighlightGroup } from '@/utils/accessibility';
 import { addRecentColor, buildPalette, type ColorUse } from '@/utils/palette';
-import { paletteModel, pickedColorModel } from '@/utils/color-panels';
+import { gradientModel, paletteModel, pickedColorModel } from '@/utils/color-panels';
+import { mountGradientEditor } from '@/utils/gradient-editor';
 import { boxModelOf, type AuthoredValue } from '@/utils/inspect';
 import { compareSpecificity, sheetLabel, shorthandCandidates, specificity, splitSelectorList, winningDeclarations, type AuthoredDeclaration, type Specificity } from '@/utils/cascade';
 import { nonDefaultDeclarations } from '@/utils/css';
@@ -467,6 +468,7 @@ export default defineContentScript({
         try {
           ui.panel.innerHTML = renderPanelHtml(shown.model);
           applyStyles(ui.panel);
+          mountGradient(shown.model);
         } catch {
           ui.panel.textContent = 'Could not render this element.';
         }
@@ -859,6 +861,7 @@ export default defineContentScript({
       if (!renderHere || !activeTool) return;
       if (id === 'eyedropper') await pickPixel();
       else if (id === 'palette') showPalette();
+      else if (id === 'gradient') await showGradient();
       else if (id === 'copy-css') await copyStyles('css');
       else if (id === 'copy-tailwind') await copyStyles('tailwind');
       else if (id === 'capture-element') await captureElementAction();
@@ -1324,6 +1327,48 @@ export default defineContentScript({
       setPinned(true);
       shown = { source: 'static', model };
       draw();
+    }
+
+    /** Open the gradient generator, seeded with the recent picks. */
+    async function showGradient() {
+      let recent: string[] = [];
+      try {
+        const stored = await browser.storage.local.get('recentColors');
+        if (Array.isArray(stored.recentColors)) recent = (stored.recentColors as unknown[]).filter((c): c is string => typeof c === 'string');
+      } catch {
+        // no history: the editor starts from its default colours
+      }
+      showStatic(gradientModel(recent));
+    }
+
+    function mountGradient(model: PanelModel) {
+      const block = model.blocks.find(b => b.kind === 'gradient');
+      const host = ui?.panel.querySelector<HTMLElement>('[data-dtp-gradient]');
+      if (!block || block.kind !== 'gradient' || !host) return;
+      mountGradientEditor(host, {
+        recent: block.recent,
+        copy: copyText,
+        pick: sampleColor,
+      });
+    }
+
+    /** Sample one pixel with the native eyedropper and remember it; null when unavailable or cancelled. */
+    async function sampleColor(): Promise<{ hex: string; recent: string[] } | null> {
+      const EyeDropperCtor = (window as Window & { EyeDropper?: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper;
+      if (typeof EyeDropperCtor !== 'function') return null;
+      if (ui) {
+        // Keep our own panel out of the sample.
+        ui.overlay.style.display = 'none';
+        ui.panel.style.display = 'none';
+      }
+      try {
+        const { sRGBHex } = await new EyeDropperCtor().open();
+        return { hex: sRGBHex, recent: await rememberColor(sRGBHex) };
+      } catch {
+        return null; // cancelled with Esc
+      } finally {
+        draw();
+      }
     }
 
     async function rememberColor(hex: string): Promise<string[]> {

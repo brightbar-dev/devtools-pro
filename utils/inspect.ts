@@ -65,6 +65,7 @@ export type PanelBlock =
   | { kind: 'swatches'; title: string; swatches: Swatch[] }
   | { kind: 'code'; text: string }
   | { kind: 'edit-form'; state: EditFormState }
+  | { kind: 'gradient'; recent: string[] }
   | { kind: 'box'; box: BoxModel }
   | { kind: 'preview'; text: string; style: Record<string, string> }
   | { kind: 'note'; text: string };

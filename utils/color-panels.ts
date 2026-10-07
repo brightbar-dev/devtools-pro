@@ -61,3 +61,8 @@ export function paletteModel(groups: PaletteGroup[]): PanelModel {
     ],
   };
 }
+
+/** The gradient generator, seeded with the recent picks; the editor itself is mounted by the inspector. */
+export function gradientModel(recent: readonly string[]): PanelModel {
+  return { toolId: 'color-picker', title: 'Gradient generator', path: [], blocks: [{ kind: 'gradient', recent: [...recent] }] };
+}
